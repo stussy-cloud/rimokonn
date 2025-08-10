@@ -43,7 +43,7 @@ function diag(label) {
   const size = (c) => (c && c.width ? `${c.width}x${c.height}` : 'null');
   if (!st) return;
   st.innerHTML =
-    `build: <b>${label}</b> / drawCityFast:${ok(window.drawCityFast)} / CITY_LAYER:${size(window.CITY_LAYER)}` +
+    `build: <b>${label}</b> / drawCityFast:${ok(drawCityFast)} / CITY_LAYER:${size(CITY_LAYER)}` +
     ` / cam: x=${cam.x.toFixed(1)} y=${cam.y.toFixed(1)} z=${cam.z.toFixed(2)}`;
 }
 addEventListener('error', (e) => {
