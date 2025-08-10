@@ -259,7 +259,7 @@ function initLevel(){ residents=[]; spots=[]; pulses=[]; inspirations=[]; floate
 }
 
 // ===== UI held box =====
-const heldIcon = document.getElementById('heldIcon'); let held=null;
+const heldIcon = document.getElementById('heldIcon');
 function updateHeldUI(){ if(!held) heldIcon.textContent='なし'; else { const map={light:'💡 ひらめき',coffee:'☕ コーヒー',music:'♪ 音楽',map:'🗺️ 地図',chat:'💬 会話',book:'📘 本'}; heldIcon.textContent = map[held.type] || held.type; } }
 
 // ===== Input =====
