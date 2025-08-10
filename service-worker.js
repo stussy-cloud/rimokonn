@@ -1,5 +1,5 @@
 // PWA用キャッシュ（更新時は名前を +1）
-const CACHE = 'hint-town-v23';
+const CACHE = 'hint-town-v24';
 const ASSETS = ['./','./index.html'];
 
 self.addEventListener('install', (event) => {
