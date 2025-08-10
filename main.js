@@ -20,32 +20,43 @@ if('serviceWorker' in navigator){
 // Canvas取得
 cvs=document.getElementById('game'); ctx=cvs.getContext('2d');
 
+// …上部はそのまま…
+
 let last=performance.now();
+let renderTimer=0, RENDER_INTERVAL = (PERF.low ? 1000/30 : 1000/60); // 低端末は30fps
+
 function loop(){
-  const n=performance.now(), dt=Math.min(.033,(n-last)/1000); last=n;
+  const now=performance.now();
+  const dt=Math.min(.033,(now-last)/1000); last=now;
+  renderTimer += dt*1000;
 
-  // 画面を必ず塗る（これが見えれば main.js は動いている）
+  // まず画面を塗る（見えていれば main.js は動いてる）
   setScreen(); ctx.fillStyle='#102040'; ctx.fillRect(0,0,cvs.width/DPR,cvs.height/DPR);
-  ctx.fillStyle='#8cf'; ctx.font='bold 16px system-ui';
-  ctx.fillText('BOOT OK', 12, 24);
 
+  // 更新（毎フレーム）
   sanitizeCam();
-
   for(const r of residents) r.update(dt);
   for(const n1 of npcs) n1.update(dt);
   for(const a of animals) a.update(dt);
   for(const f of floaters) f.update(dt); floaters=floaters.filter(f=>f.t<1.2);
   for(const p of pulses) p.update(dt); pulses=pulses.filter(p=>p.life>0);
 
-  setWorld();
-  ctx.clearRect(cam.x, cam.y, viewSizeWorld().w, viewSizeWorld().h);
-  drawCity(); for(const s of stations) s.draw();
-  const zlist=[...inspirations, ...animals, ...npcs, ...residents, ...floaters, ...pulses];
-  zlist.sort((a,b)=>(a.y||0)-(b.y||0)); for(const it of zlist){ if(it.draw) it.draw(); }
+  // 描画（端末に応じて間引き）
+  if(renderTimer >= RENDER_INTERVAL){
+    renderTimer = 0;
 
-  setScreen();
-  const done=residents.filter(r=>r.state==='resolved').length;
-  document.getElementById('status').innerHTML=`進捗: <b>${done}/${residents.length}</b> ／ 住人: ${residents.length} ／ 群衆: ${npcs.length} ／ 動物: ${animals.length} ／ 建物: ${buildings.length}`;
+    // 背景はビューポートだけブリット
+    drawCityFast();
+
+    // 動くもの
+    const zlist=[...inspirations, ...animals, ...npcs, ...residents, ...floaters, ...pulses];
+    zlist.sort((a,b)=>(a.y||0)-(b.y||0)); for(const it of zlist){ if(it.draw) it.draw(); }
+
+    // HUD
+    setScreen();
+    const done=residents.filter(r=>r.state==='resolved').length;
+    document.getElementById('status').innerHTML=`進捗: <b>${done}/${residents.length}</b> ／ 住人: ${residents.length} ／ 群衆: ${npcs.length} ／ 動物: ${animals.length} ／ 建物: ${buildings.length}`;
+  }
 
   requestAnimationFrame(loop);
 }
