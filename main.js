@@ -46,7 +46,23 @@ function loop(){
     renderTimer = 0;
 
     // 背景はビューポートだけブリット
-    drawCityFast();
+    // 背景は try-catch で安全に呼ぶ＋エラーを画面に表示
+　　try {
+　　  if (typeof drawCityFast === 'function') {
+　　    drawCityFast();           // 新方式（ビューポートだけブリット）
+　　　  } else if (typeof drawCity === 'function') {
+　　    drawCity();               // 旧方式にフォールバック
+　　　  } else {
+　　    throw new Error('drawCityFast/drawCity が見つからない');
+　　　  }
+　　　　} catch (e) {
+    
+  // ここに来たら描画側が壊れてます。画面にエラーを出す
+  setScreen();
+  ctx.fillStyle = '#f66';
+  ctx.font = 'bold 14px system-ui';
+  ctx.fillText('DRAW ERROR: ' + e.message, 12, 42);
+}
 
     // 動くもの
     const zlist=[...inspirations, ...animals, ...npcs, ...residents, ...floaters, ...pulses];
