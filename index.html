@@ -65,12 +65,14 @@
 </script>
 
 <!-- スクリプト群（順番厳守） -->
-<script src="./polyfills.js"></script>
-<script src="./config.js"></script>
-<script src="./city.js"></script>
-<script src="./entities.js"></script>
-<script src="./input.js"></script>
-<script src="./main.js"></script>
-<script>document.getElementById('status').innerHTML+=' / build: perf6';</script>
+<script src="./polyfills.js?v=perf7"></script>
+<script src="./config.js?v=perf7"></script>
+<script src="./city.js?v=perf7"></script>
+<script src="./entities.js?v=perf7"></script>
+<script src="./input.js?v=perf7"></script>
+<script src="./main.js?v=perf7"></script>
+
+<!-- ビルド確認用（今読んだ版が必ず表示されます） -->
+<script>document.getElementById('status').insertAdjacentHTML('beforeend',' / build: <b>perf7</b>');</script>
 </body>
 </html>
