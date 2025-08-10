@@ -1,9 +1,9 @@
-// ===== モバイル最適化 + カメラ =====
+// ===== モバイル最適化 + カメラ/座標ユーティリティ =====
 const PERF = { low: /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) };
-const DPR = 1;                         // 超安定
+const DPR = 1;                         // 超安定（必要なら 2 に戻せます）
 const CONFIG = { world:{w:3600,h:2400,padding:100}, roadGap:240, roadW:36 };
 let cvs, ctx;
-const cam = { x:0, y:0, z:0.6 };       // z: ズーム
+const cam = { x:0, y:0, z:0.6 };       // z: ズーム倍率
 const zMin = 0.45, zMax = 2.0;
 
 const rand=(a,b)=>a+Math.random()*(b-a);
@@ -26,4 +26,9 @@ addEventListener('resize', resize);
 function setWorld(){ ctx.setTransform(DPR*cam.z,0,0,DPR*cam.z, -cam.x*DPR*cam.z, -cam.y*DPR*cam.z); }
 function setScreen(){ ctx.setTransform(DPR,0,0,DPR,0,0); }
 function screenToWorld(px,py){ return {x: cam.x + px/cam.z, y: cam.y + py/cam.z}; }
-function sanitizeCam(){ const v=viewSizeWorld(); cam.x=clamp(cam.x,0,CONFIG.world.w-v.w); cam.y=clamp(cam.y,0,CONFIG.world.h-v.h); cam.z=clamp(cam.z,zMin,zMax); }
+function sanitizeCam(){
+  const v=viewSizeWorld();
+  cam.x=clamp(cam.x,0,CONFIG.world.w-v.w);
+  cam.y=clamp(cam.y,0,CONFIG.world.h-v.h);
+  cam.z=clamp(cam.z,zMin,zMax);
+}
