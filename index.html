@@ -4,14 +4,10 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <meta name="theme-color" content="#0f1224"/>
-<title>ヒントの町 – ポップシティ v0.6.2</title>
+<title>ヒントの町 – ポップシティ v0.6.3</title>
 <style>
-  :root{
-    --bg1:#0f1224; --bg2:#15193a; --ink:#e6e7ff;
-    --pane:rgba(255,255,255,.08); --pane2:rgba(255,255,255,.12);
-  }
-  html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg1),var(--bg2));color:var(--ink);
-    font-family:system-ui,-apple-system,Segoe UI,Roboto,Noto Sans JP,Helvetica,Arial}
+  :root{ --bg1:#0f1224; --bg2:#15193a; --ink:#e6e7ff; --pane:rgba(255,255,255,.08); --pane2:rgba(255,255,255,.12); }
+  html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg1),var(--bg2));color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,Noto Sans JP,Helvetica,Arial}
   .wrap{display:grid;place-items:center;height:100%;gap:16px}
   .hud{position:absolute;left:12px;top:12px;font-size:14px;line-height:1.4;pointer-events:none;text-shadow:0 1px 0 rgba(0,0,0,.35)}
   .hud h1{margin:0 0 8px;font-size:20px}
@@ -33,7 +29,7 @@
   <canvas id="game" width="960" height="600" aria-label="game"></canvas>
 
   <div class="hud">
-    <h1>ヒントの町 v0.6.2 <span class="pill">タップ: 拾う/与える</span><span class="pill">ピンチ: ズーム</span><span class="pill">2本指ドラッグ: パン</span></h1>
+    <h1>ヒントの町 v0.6.3 <span class="pill">タップ: 拾う/与える</span><span class="pill">ピンチ: ズーム</span><span class="pill">2本指ドラッグ: パン</span></h1>
     <div id="status"></div>
   </div>
 
@@ -55,13 +51,13 @@
   </div>
 </div>
 
-<!-- 0) SWをワンタップで無効化できる安全スイッチ（?killsw=1 で有効） -->
+<!-- 0) SWワンクリック無効化: https://.../?killsw=1 -->
 <script>
 (() => {
   const qs = new URLSearchParams(location.search);
   if (qs.get('killsw') === '1' && 'serviceWorker' in navigator) {
-    navigator.serviceWorker.getRegistrations().then(regs => {
-      regs.forEach(r => r.unregister());
+    navigator.serviceWorker.getRegistrations().then(rs => {
+      rs.forEach(r => r.unregister());
       location.replace(location.origin + location.pathname + '?nocache=' + Date.now());
     });
   }
@@ -136,7 +132,7 @@ const RULES={
 const cvs=document.getElementById('game'), ctx=cvs.getContext('2d');
 if(typeof ctx.roundRect!=='function'){ ctx.roundRect = CanvasRenderingContext2D.prototype.roundRect.bind(ctx); }
 
-let buildings=[], parks=[], props=[], stationPointsData=[], stations=[], inspirations=[];
+let buildings=[], parks=[], props=[], stationPoints=[], stations=[], inspirations=[];
 let residents=[], npcs=[], animals=[], pulses=[], floaters=[];
 let held=null;
 const cam={x:0,y:0,z:0.6}; const zMin=0.45, zMax=2.2;
@@ -155,16 +151,16 @@ function sanitizeCam(){
   if(!isFinite(cam.x)||!isFinite(cam.y)||!isFinite(cam.z)||cam.z<=0){ cam.x=0; cam.y=0; cam.z=0.6; }
 }
 
-/*** ===== City (オリジナル描画) ===== ***/
+/*** ===== City（生成＆描画） ===== ***/
 function drawCrosswalk(x,y,w,h,step=10){ ctx.fillStyle=PALETTE.zebra; for(let i=0;i<w;i+=step*2){ ctx.fillRect(x+i,y,step,h); } }
 function drawTree(x,y){ ctx.fillStyle='rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(x,y+12,14,6,0,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle:'#2e7d32'; ctx.beginPath(); ctx.arc(x,y,16,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#5b8a3a'; ctx.beginPath(); ctx.arc(x-8,y+2,10,0,Math.PI*2); ctx.arc(x+9,y+1,8,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#2e7d32'; ctx.beginPath(); ctx.arc(x,y,16,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#5b8a3a'; ctx.beginPath(); ctx.arc(x-8,y+2,10,0,Math.PI*2); ctx.arc(x+9,y+1,8,0,Math.PI*2); ctx.fill();
   ctx.fillStyle='#7b4a2b'; ctx.fillRect(x-3,y,6,16); }
-function drawBench(x,y){ ctx.fillStyle:'#a06c3f'; ctx.fillRect(x-18,y,36,6); ctx.fillRect(x-18,y-8,36,6); ctx.fillStyle='#6d4726'; ctx.fillRect(x-16,y+6,4,10); ctx.fillRect(x+12,y+6,4,10); }
+function drawBench(x,y){ ctx.fillStyle='#a06c3f'; ctx.fillRect(x-18,y,36,6); ctx.fillRect(x-18,y-8,36,6); ctx.fillStyle='#6d4726'; ctx.fillRect(x-16,y+6,4,10); ctx.fillRect(x+12,y+6,4,10); }
 function drawVending(x,y){ ctx.fillStyle='#4fa3ff'; ctx.roundRect(x-10,y-18,20,36,4); ctx.fill(); ctx.fillStyle='#eaf5ff'; ctx.fillRect(x-8,y-16,16,10); ctx.fillRect(x-8,y-4,16,12); ctx.fillStyle='#c8ddff'; ctx.fillRect(x-6,y-2,12,2); ctx.fillRect(x-6,y+2,12,2); }
 
 function genCity(){
-  buildings.length=0; parks.length=0; props.length=0; stationPointsData.length=0;
+  buildings.length=0; parks.length=0; props.length=0; stationPoints.length=0;
   const G=CONFIG.roadGap, W=CONFIG.roadW, SW=CONFIG.sidewalk;
 
   for(let x=CONFIG.world.w*0.08; x<CONFIG.world.w*0.92; x+=G){
@@ -185,13 +181,19 @@ function genCity(){
         const types=['cafe','book','home','apt','home','home','salon','koban','phone'];
         const t=pick(types);
         buildings.push({x:cx,y:cy,w,h,type:t,c:pick(PALETTE.buildBase)});
-        if(t==='salon'||t==='koban'||t==='phone'||t==='home'){
-          stationPointsData.push({x:cx+w/2,y:cy+h/2,type: t});
+        if(['salon','koban','phone','home'].includes(t)){
+          stationPoints.push({x:cx+w/2,y:cy+h/2,type:t});
         }
         if(Math.random()<0.3) props.push({kind:'vending',x:cx+w/2,y:cy+h/2+Math.min(h/2+18,30)});
         if(Math.random()<0.5) props.push({kind:'tree',x:cx+w+10,y:cy+h/2});
       }
     }
+  }
+
+  // 念のため：極端に少ない場合の最低保証
+  if(buildings.length===0){
+    buildings.push({x:400,y:300,w:120,h:80,type:'salon',c:'#6ec1ff'});
+    stationPoints.push({x:460,y:340,type:'salon'});
   }
 }
 
@@ -303,19 +305,27 @@ class Animal{
 /*** ===== レイアウト/初期化 ===== ***/
 function layoutWorld(){
   genCity();
-  stations = stationPointsData.map(s=>new Station(s.x,s.y,s.type));
+  stations = stationPoints.map(s=>new Station(s.x,s.y,s.type));
   inspirations.length=0; residents.length=0; npcs.length=0; animals.length=0; pulses.length=0; floaters.length=0; held=null;
-  for(let i=0;i<32;i++){ const b=pick(buildings); const px=clamp(b.x+b.w/2+rand(-60,60),CONFIG.world.padding,CONFIG.world.w-CONFIG.world.padding);
-    const py=clamp(b.y+b.h/2+rand(-60,60),CONFIG.world.padding,CONFIG.world.h-CONFIG.world.padding); const it=pick(ITEMS); inspirations.push(new Inspiration(px,py,it.id)); }
-  const hairStyles=['short','long','ponytail'], hairColors=['#222','#6b3a1e','#1e3b6b','#6b1e4f','#2e6b2e'];
-  for(let i=0;i<10;i++){ const need=NEEDS[i%NEEDS.length].id; const look={hair:{style:pick(hairStyles), color:pick(hairColors)}}; const bx=pick(buildings);
-    residents.push(new Resident(bx.x+bx.w/2,bx.y+bx.h/2,i,need,look)); }
-  for(let i=0;i<28;i++){ const look={hair:{style:pick(hairStyles), color:pick(hairColors)}}; const bx=pick(buildings);
-    npcs.push(new NPC(bx.x+bx.w/2,bx.y+bx.h/2,pick(PALETTE.npcClothes),look)); }
-  for(let i=0;i<16;i++){ const bx=pick(buildings); animals.push(new Animal(bx.x+bx.w/2,bx.y+bx.h/2,pick(['cat','dog','pigeon']))); }
-  const vs=viewSizeWorld(); cam.x=(CONFIG.world.w-vs.w)/2; cam.y=(CONFIG.world.h-vs.h)/2; cam.z=0.6;
-}
 
-/*** ===== 入力 ===== ***/
-const heldIconEl=document.getElementById('heldIcon');
-function updateHeldUI(){ const spec
+  // ヒントを配置
+  for(let i=0;i<32;i++){
+    const b=pick(buildings);
+    const px=clamp(b.x+b.w/2+rand(-60,60),CONFIG.world.padding,CONFIG.world.w-CONFIG.world.padding);
+    const py=clamp(b.y+b.h/2+rand(-60,60),CONFIG.world.padding,CONFIG.world.h-CONFIG.world.padding);
+    const it=pick(ITEMS);
+    inspirations.push(new Inspiration(px,py,it.id));
+  }
+  // 指示対象
+  const hairStyles=['short','long','ponytail'], hairColors=['#222','#6b3a1e','#1e3b6b','#6b1e4f','#2e6b2e'];
+  for(let i=0;i<10;i++){
+    const need=NEEDS[i%NEEDS.length].id;
+    const look={hair:{style:pick(hairStyles), color:pick(hairColors)}};
+    const bx=pick(buildings); residents.push(new Resident(bx.x+bx.w/2,bx.y+bx.h/2,i,need,look));
+  }
+  // 群衆＆動物
+  for(let i=0;i<28;i++){ const look={hair:{style:pick(hairStyles), color:pick(hairColors)}}; const bx=pick(buildings); npcs.push(new NPC(bx.x+bx.w/2,bx.y+bx.h/2,pick(PALETTE.npcClothes),look)); }
+  for(let i=0;i<16;i++){ const bx=pick(buildings); animals.push(new Animal(bx.x+bx.w/2,bx.y+bx.h/2,pick(['cat','dog','pigeon']))); }
+
+  // カメラ中央
+  const vs=vie
