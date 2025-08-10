@@ -1,4 +1,4 @@
-// ===== 背景キャッシュ =====
+// ===== 広い街を1枚キャッシュ → 見えてる範囲だけブリット =====
 let CITY_LAYER=null, CITY_SCALE=0.4;
 
 function buildCityLayer(){
@@ -16,7 +16,7 @@ function buildCityLayer(){
   for(let x=0;x<W;x+=CONFIG.roadGap){ g.fillRect(x,0,CONFIG.roadW,H); }
   for(let y=0;y<H;y+=CONFIG.roadGap){ g.fillRect(0,y,W,CONFIG.roadW); }
 
-  // 交差点の簡易横断歩道
+  // 横断歩道（簡易）
   g.fillStyle='#dfe7ff';
   for(let x=0;x<W;x+=CONFIG.roadGap){
     for(let y=0;y<H;y+=CONFIG.roadGap){
@@ -25,7 +25,7 @@ function buildCityLayer(){
     }
   }
 
-  // 建物ブロック（軽量）
+  // 建物ブロック（軽量ランダム）
   const colors=['#6ec1ff','#ffd166','#7bd389','#f49ac2','#95d0fc','#ffc2a8'];
   for(let bx=60; bx<W-180; bx+=CONFIG.roadGap){
     for(let by=60; by<H-180; by+=CONFIG.roadGap){
