@@ -1,12 +1,17 @@
-// 軽量な群衆（ワールド座標）
-const POP = PERF.low ? {res:6,npcs:12} : {res:12,npcs:36};
+// ===== 軽量群衆（ワールド座標で移動） =====
+const POP = PERF.low ? {npcs:14} : {npcs:36};
 let dots=[];
 
 function initEntities(){
   dots=[];
   for(let i=0;i<POP.npcs;i++){
-    dots.push({ x:rand(200,CONFIG.world.w-200), y:rand(200,CONFIG.world.h-200),
-      vx:rand(-0.6,0.6), vy:rand(-0.6,0.6), c:pick(['#ff7aa2','#ffd166','#7bb6ff','#7bd389']) });
+    dots.push({
+      x:rand(200,CONFIG.world.w-200),
+      y:rand(200,CONFIG.world.h-200),
+      vx:rand(-0.6,0.6),
+      vy:rand(-0.6,0.6),
+      c:pick(['#ff7aa2','#ffd166','#7bb6ff','#7bd389'])
+    });
   }
 }
 
