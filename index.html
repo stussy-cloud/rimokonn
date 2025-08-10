@@ -4,21 +4,20 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <meta name="theme-color" content="#0f1224"/>
-<title>ヒントの町 – 結末つき/ポップ版 v0.4</title>
+<title>ヒントの町 – ワイドシティ/ズーム v0.5</title>
 <style>
   :root{
-    --bg1:#0f1224; --bg2:#15193a;
-    --ink:#e6e7ff; --pane:rgba(255,255,255,.08); --pane2:rgba(255,255,255,.12);
-    --accent:#6ea8fe;
+    --bg1:#0f1224; --bg2:#15193a; --ink:#e6e7ff;
+    --pane:rgba(255,255,255,.08); --pane2:rgba(255,255,255,.12);
   }
   html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg1),var(--bg2));color:var(--ink);
-    font-family:system-ui,-apple-system,Segoe UI,Roboto,Noto Sans JP,Helvetica,Arial;}
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,Noto Sans JP,Helvetica,Arial}
   .wrap{display:grid;place-items:center;height:100%;gap:16px}
-  .hud{position:absolute;inset:12px 12px auto 12px;font-size:14px;line-height:1.45;pointer-events:none;text-shadow:0 1px 0 rgba(0,0,0,.35)}
-  .hud h1{margin:0 0 8px;font-size:20px;letter-spacing:.02em}
+  .hud{position:absolute;left:12px;top:12px;font-size:14px;line-height:1.4;pointer-events:none;text-shadow:0 1px 0 rgba(0,0,0,.35)}
+  .hud h1{margin:0 0 8px;font-size:20px}
   .pill{display:inline-block;background:var(--pane);border:1px solid var(--pane2);padding:3px 8px;border-radius:999px;margin-right:8px}
   canvas{border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.4), inset 0 0 0 1px rgba(255,255,255,.08);touch-action:none}
-  details.legend{position:absolute;right:12px;top:12px;background:var(--pane);border:1px solid var(--pane2);border-radius:12px;padding:6px 10px;font-size:12px;max-width:260px}
+  details.legend{position:absolute;right:12px;top:12px;background:var(--pane);border:1px solid var(--pane2);border-radius:12px;padding:6px 10px;font-size:12px;max-width:280px}
   details.legend[open]{background:rgba(255,255,255,.1)}
   details.legend summary{cursor:pointer;list-style:none;user-select:none}
   .legend-body div{display:flex;gap:8px;align-items:center;margin:4px 0}
@@ -26,9 +25,8 @@
   .held{display:grid;grid-auto-flow:column;gap:10px;align-items:center;background:var(--pane);border:1px solid var(--pane2);backdrop-filter:blur(8px);padding:8px 12px;border-radius:14px}
   .btn{pointer-events:all;cursor:pointer;display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(255,255,255,.18);
     background:linear-gradient(180deg,rgba(255,255,255,.12),rgba(255,255,255,.06));padding:6px 10px;border-radius:12px;color:#fff;text-decoration:none;font-weight:700;font-size:12px}
-  .toast{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(10,224,130,.08);border:1px solid rgba(10,224,130,.25);
-    color:#baffd9;padding:16px 20px;border-radius:14px;font-size:16px;opacity:0;transition:.4s}
-  .toast.show{opacity:1}
+  .zoomBtns{position:absolute;right:12px;bottom:12px;display:grid;gap:8px}
+  .mini{position:absolute;left:12px;bottom:12px;background:var(--pane);border:1px solid var(--pane2);border-radius:10px;padding:6px}
 </style>
 </head>
 <body>
@@ -36,7 +34,7 @@
   <canvas id="game" width="960" height="600" aria-label="game"></canvas>
 
   <div class="hud">
-    <h1>ヒントの町 <span class="pill">1) アイテムを拾う</span><span class="pill">2) 住人に与える</span></h1>
+    <h1>ヒントの町 <span class="pill">タップ: 拾う/与える</span><span class="pill">ピンチ: ズーム</span><span class="pill">2本指ドラッグ: パン</span></h1>
     <div id="status"></div>
   </div>
 
@@ -53,14 +51,19 @@
     </div>
   </div>
 
-  <div class="toast" id="toast">みんな解決！🎉</div>
+  <div class="zoomBtns">
+    <button class="btn" id="zin">＋</button>
+    <button class="btn" id="zout">－</button>
+  </div>
+
+  <div class="mini" id="mini">ミニマップ</div>
 </div>
 
 <script>
-// PWA: SW登録
+// ===== PWA: Service Worker =====
 if('serviceWorker' in navigator){addEventListener('load',()=>navigator.serviceWorker.register('./service-worker.js').catch(console.warn));}
 
-// Polyfill: roundRect
+// ===== Polyfill: roundRect =====
 if(!CanvasRenderingContext2D.prototype.roundRect){
   CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){const m=Math.min(w,h);if(r>m/2)r=m/2;this.beginPath();this.moveTo(x+r,y);
   this.arcTo(x+w,y,x+w,y+h,r);this.arcTo(x+w,y+h,x,y+h,r);this.arcTo(x,y+h,x,y,r);this.arcTo(x,y,x+w,y,r);this.closePath();return this;}
@@ -70,136 +73,181 @@ if(!CanvasRenderingContext2D.prototype.roundRect){
 const DPR=Math.max(1,Math.min(2,window.devicePixelRatio||1));
 const rand=(a,b)=>a+Math.random()*(b-a);
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+function lerp(a,b,t){return a+(b-a)*t}
 
 // ===== Config/Data =====
-const CONFIG={world:{w:960,h:600,padding:40}, residentsCount:6, speed:1.15, focusedBoost:1.3, r:14};
-const COLORS={grid:'rgba(255,255,255,.06)', residents:['#ff7aa2','#ffd166','#7bd389','#7bb6ff']};
+const CONFIG={
+  world:{w:3000,h:2000,padding:80},    // ← 広い街
+  speed:1.2, focusedBoost:1.35,
+  r:16,                                // キャラ基本半径（全身描画に使用）
+  roadGap:220, roadW:36
+};
+const COLORS={grid:'rgba(255,255,255,.06)', roads:'#2a2f52', park:'#1d4d2c',
+  residents:['#ff7aa2','#ffd166','#7bd389','#7bb6ff','#f49ac2','#95d0fc']
+};
 
+// アイテム（ヒント）
 const ITEMS=[
-  {id:'photo_short',label:'髪型写真(ショート)',icon:'📸'},
-  {id:'photo_long', label:'髪型写真(ロング)',  icon:'📸'},
-  {id:'map',        label:'地図',               icon:'🗺️'},
-  {id:'police',     label:'交番',               icon:'👮'},
-  {id:'phone',      label:'公衆電話',           icon:'📞'},
-  {id:'light',      label:'ひらめき',           icon:'💡'},
-  {id:'music',      label:'音楽',               icon:'♪'},
+  {id:'photo_short',label:'髪型(ショート)',icon:'📸'},
+  {id:'photo_long', label:'髪型(ロング)',  icon:'📸'},
+  {id:'map',        label:'地図',           icon:'🗺️'},
+  {id:'police',     label:'交番',           icon:'👮'},
+  {id:'phone',      label:'公衆電話',       icon:'📞'},
+  {id:'music',      label:'音楽',           icon:'♪'},
+  {id:'light',      label:'ひらめき',       icon:'💡'},
 ];
 
-const NEEDS=[
-  {id:'hair', icon:'💇', label:'髪型に迷い中'},
-  {id:'lost', icon:'❓', label:'道に迷い中'},
-];
+// 悩み
+const NEEDS=[{id:'hair',icon:'💇',label:'髪型に迷い中'},{id:'lost',icon:'❓',label:'道に迷い中'}];
+// 駅（目的地）
+const STATIONS=[{id:'salon',icon:'💈',label:'サロン'},{id:'koban',icon:'👮',label:'交番'},{id:'phone',icon:'📞',label:'公衆電話'},{id:'home',icon:'🏠',label:'おうち'}];
 
-const STATIONS=[
-  {id:'salon', icon:'💈', label:'サロン'},
-  {id:'koban', icon:'👮', label:'交番'},
-  {id:'phone', icon:'📞', label:'公衆電話'},
-  {id:'home',  icon:'🏠', label:'おうち'}
-];
-
-// ルール：need × item → 結末
+// ルール（簡略版）
 const RULES={
   hair:{
-    photo_short:{ok:true, goTo:'salon', hair:'short', msg:'この髪型にしよう！'},
-    photo_long: {ok:true, goTo:'salon', hair:'long',  msg:'これに決めた！'},
-    map:{ok:false, msg:'髪型の参考にはならない…'},
-    police:{ok:false, msg:'それは違う気が…'},
-    phone:{ok:false, msg:'予約の電話？今じゃない…'}
+    photo_short:{ok:true,goTo:'salon',hair:'short',msg:'この髪型に！'},
+    photo_long :{ok:true,goTo:'salon',hair:'long', msg:'これに決めた！'},
+    map:{ok:false,msg:'髪型の参考じゃない…'}, police:{ok:false,msg:'違う…'}, phone:{ok:false,msg:'今じゃない…'}
   },
   lost:{
-    police:{ok:true, escort:true, goTo:'home', msg:'一緒に行きましょう'},
-    map:{ok:true, goTo:null, msg:'地図でわかった！'}, // その場で解決
-    phone:{ok:false, stillLost:true, msg:'電話では解決せず…'}
+    police:{ok:true,escort:true,goTo:'home',msg:'一緒に行きましょう'},
+    map:{ok:true,goTo:null,msg:'地図でわかった！'},
+    phone:{ok:false,stillLost:true,msg:'電話では解決せず…'}
   }
 };
 
 // ===== State =====
 const cvs=document.getElementById('game'), ctx=cvs.getContext('2d');
-let inspirations=[], stations=[], residents=[], pulses=[], floaters=[];
+let buildings=[], parks=[], stations=[], inspirations=[], residents=[], pulses=[], floaters=[];
 let held=null, tNow=0;
 
+// カメラ（パン&ズーム）
+const cam={x:0,y:0,z:0.6};          // z=ズーム倍率（小さいほど広域）
+const zMin=0.45, zMax=2.0;
+
 // ===== Responsive =====
-function desired(){const maxW=960,maxH=600,ratio=maxW/maxH;let w=Math.min(window.innerWidth-24,maxW),h=Math.min(window.innerHeight-200,maxH);
-  w=Math.max(320,w);h=Math.max(260,h);if(w/h>ratio){w=h*ratio}else{h=w/ratio}return{w:Math.round(w),h:Math.round(h)}}
-function resize(reflow=false){const s=desired();CONFIG.world.w=s.w;CONFIG.world.h=s.h;cvs.style.width=s.w+'px';cvs.style.height=s.h+'px';
-  cvs.width=Math.floor(s.w*DPR);cvs.height=Math.floor(s.h*DPR);ctx.setTransform(DPR,0,0,DPR,0,0);if(reflow) layoutStations();}
-addEventListener('resize',()=>resize(true));
+function desired(){const maxW=960,maxH=600,ratio=maxW/maxH;let w=Math.min(window.innerWidth-24,maxW),h=Math.min(window.innerHeight-180,maxH);
+  w=Math.max(320,w);h=Math.max(260,h);if(w/h>ratio)w=h*ratio;else h=w/ratio;return{w:Math.round(w),h:Math.round(h)}}
+function viewSizeWorld(){ // 現在表示範囲（world単位）
+  const w=cvs.width/(DPR*cam.z), h=cvs.height/(DPR*cam.z); return {w,h};
+}
+function resize(){const s=desired(); cvs.style.width=s.w+'px';cvs.style.height=s.h+'px'; cvs.width=Math.floor(s.w*DPR);cvs.height=Math.floor(s.h*DPR); ctx.setTransform(1,0,0,1,0,0);}
+addEventListener('resize',()=>resize());
+
+// 画面<->ワールド座標
+function screenToWorld(px,py){return {x: cam.x + px/cam.z, y: cam.y + py/cam.z}}
+function applyCamera(){ctx.setTransform(DPR*cam.z,0,0,DPR*cam.z, -cam.x*DPR*cam.z, -cam.y*DPR*cam.z)}
+function resetTransform(){ctx.setTransform(DPR,0,0,DPR,0,0)}
+
+// ===== City generation =====
+function genCity(){
+  buildings.length=0; parks.length=0; stations.length=0;
+  // 交差する道路
+  // 建物をブロックごとに配置
+  for(let x=CONFIG.world.w*0.08; x<CONFIG.world.w*0.92; x+=CONFIG.roadGap){
+    for(let y=CONFIG.world.h*0.1; y<CONFIG.world.h*0.9; y+=CONFIG.roadGap){
+      // ブロック矩形
+      const bx=x+CONFIG.roadW, by=y+CONFIG.roadW, bw=CONFIG.roadGap-CONFIG.roadW*2, bh=CONFIG.roadGap-CONFIG.roadW*2;
+      // たまに公園
+      if(Math.random()<0.08){ parks.push({x:bx+8,y:by+8,w:bw-16,h:bh-16}); continue; }
+      // 小さな建物をランダム配置
+      const n=4+Math.floor(Math.random()*4);
+      for(let i=0;i<n;i++){
+        const w=40+Math.random()*60, h=28+Math.random()*48;
+        const cx=bx+8+Math.random()*(bw-w-16), cy=by+8+Math.random()*(bh-h-16);
+        buildings.push({x:cx,y:cy,w,h,c:'#'+[...Array(3)].map(()=>((128+Math.random()*100)|0).toString(16)).join('')});
+      }
+    }
+  }
+  // 目的地
+  const pad=120;
+  stations.push({x:CONFIG.world.w-pad,y:pad,type:'salon'});
+  stations.push({x:CONFIG.world.w-pad,y:pad+120,type:'koban'});
+  stations.push({x:CONFIG.world.w-pad,y:pad+240,type:'phone'});
+  stations.push({x:pad,y:CONFIG.world.h-pad,type:'home'});
+}
 
 // ===== Entities =====
 class Pulse{constructor(x,y,c){this.x=x;this.y=y;this.r=0;this.life=1;this.c=c||'#3ee0ff'}update(dt){this.r+=260*dt;this.life-=.8*dt}
-  draw(){if(this.life<=0)return;ctx.save();ctx.beginPath();ctx.arc(this.x,this.y,this.r,0,Math.PI*2);ctx.strokeStyle=`${this.c}AA`;ctx.lineWidth=2;ctx.stroke();ctx.restore();}}
+  draw(){if(this.life<=0)return;applyCamera();ctx.beginPath();ctx.arc(this.x,this.y,this.r,0,Math.PI*2);ctx.strokeStyle=`${this.c}AA`;ctx.lineWidth=2;ctx.stroke();resetTransform()}}
 class Floater{constructor(x,y,txt,col){this.x=x;this.y=y;this.t=0;this.txt=txt;this.col=col||'#fff'}update(dt){this.t+=dt;this.y-=18*dt}
-  draw(){const a=Math.max(0,1-this.t/1.2);if(a<=0)return;ctx.save();ctx.globalAlpha=a;ctx.font='bold 14px system-ui';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillStyle=this.col;ctx.fillText(this.txt,this.x,this.y);ctx.restore();}}
+  draw(){const a=Math.max(0,1-this.t/1.2);if(a<=0)return;applyCamera();ctx.save();ctx.globalAlpha=a;ctx.font='bold 14px system-ui';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillStyle=this.col;ctx.fillText(this.txt,this.x,this.y);ctx.restore();resetTransform()}}
 class Station{constructor(x,y,type){this.x=x;this.y=y;this.type=type}
-  draw(){ctx.save();ctx.fillStyle='rgba(255,255,255,.09)';ctx.strokeStyle='rgba(255,255,255,.2)';ctx.lineWidth=2;ctx.roundRect(this.x-22,this.y-16,44,32,8);ctx.fill();ctx.stroke();
-    const spec=STATIONS.find(s=>s.id===this.type);ctx.font='18px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#fff';ctx.fillText(spec?spec.icon:'?',this.x,this.y);ctx.restore();}}
+  draw(){applyCamera();ctx.save();ctx.fillStyle='rgba(255,255,255,.09)';ctx.strokeStyle='rgba(255,255,255,.25)';ctx.lineWidth=2;ctx.roundRect(this.x-26,this.y-20,52,40,10);ctx.fill();ctx.stroke();
+    const spec=STATIONS.find(s=>s.id===this.type);ctx.font='22px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#fff';ctx.fillText(spec?spec.icon:'?',this.x,this.y);ctx.restore();resetTransform()}}
 class Inspiration{constructor(x,y,type){this.x=x;this.y=y;this.type=type}
-  draw(){const spec=ITEMS.find(i=>i.id===this.type);ctx.save();ctx.font='20px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#fff';ctx.fillText(spec?spec.icon:'?',this.x,this.y);ctx.restore();}}
+  draw(){applyCamera();const spec=ITEMS.find(i=>i.id===this.type);ctx.save();ctx.font='22px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#fff';ctx.fillText(spec?spec.icon:'?',this.x,this.y);ctx.restore();resetTransform()}}
 
-// キャラの見た目（デフォルメ＋髪型）
-function drawChibi(x,y,baseColor,hair,face){ // face: 'happy'|'meh'|'lost'
-  // 体
+// 全身キャラ（デフォルメ）
+function drawBody(x,y,base,face,hair,step){
+  applyCamera();
   ctx.save();
-  ctx.shadowColor='rgba(0,0,0,.25)'; ctx.shadowBlur=6; ctx.shadowOffsetY=2;
-  ctx.fillStyle=baseColor; ctx.beginPath(); ctx.arc(x,y,CONFIG.r,0,Math.PI*2); ctx.fill();
+  // 影
+  ctx.fillStyle='rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(x,y+12,14,6,0,0,Math.PI*2); ctx.fill();
+  // 足（歩行アニメ：step -1..1）
+  ctx.strokeStyle='#222'; ctx.lineWidth=3;
+  ctx.beginPath(); ctx.moveTo(x-6,y+8); ctx.lineTo(x-6+step*2,y+16); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x+6,y+8); ctx.lineTo(x+6-step*2,y+16); ctx.stroke();
+  // 体
+  ctx.fillStyle=base; ctx.beginPath(); ctx.roundRect(x-12,y-6,24,26,8); ctx.fill();
+  // 腕
+  ctx.strokeStyle='#333'; ctx.lineWidth=3;
+  ctx.beginPath(); ctx.moveTo(x-12,y); ctx.lineTo(x-20,y+6); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x+12,y); ctx.lineTo(x+20,y+6); ctx.stroke();
   // 顔
-  ctx.fillStyle='#ffe'; ctx.beginPath(); ctx.arc(x,y-2,CONFIG.r*0.75,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#ffe'; ctx.beginPath(); ctx.arc(x,y-10,10,0,Math.PI*2); ctx.fill();
   // 髪
-  if(hair==='short'){ctx.fillStyle='#222'; ctx.beginPath(); ctx.arc(x,y-8,CONFIG.r*0.9,Math.PI*1.15,Math.PI*1.85); ctx.lineTo(x+CONFIG.r*0.9,y-2); ctx.closePath(); ctx.fill();}
-  if(hair==='long'){ctx.fillStyle='#222'; ctx.beginPath(); ctx.arc(x,y-10,CONFIG.r,Math.PI*1.1,Math.PI*1.9); ctx.lineTo(x+CONFIG.r*0.9,y+6); ctx.arc(x,y+8,CONFIG.r*0.9,0,Math.PI,true); ctx.closePath(); ctx.fill();}
-  // 目・口
+  ctx.fillStyle=hair.color;
+  if(hair.style==='short'){ ctx.beginPath(); ctx.arc(x,y-14,11,Math.PI*1.1,Math.PI*1.9); ctx.lineTo(x+10,y-8); ctx.closePath(); ctx.fill(); }
+  if(hair.style==='long'){ ctx.beginPath(); ctx.arc(x,y-15,12,Math.PI*1.1,Math.PI*1.9); ctx.lineTo(x+10,y+2); ctx.arc(x,y+4,12,0,Math.PI,true); ctx.closePath(); ctx.fill(); }
+  if(hair.style==='ponytail'){ ctx.beginPath(); ctx.arc(x,y-14,10,Math.PI*1.1,Math.PI*1.9); ctx.fill(); ctx.beginPath(); ctx.ellipse(x+8,y-7,4,8,0,0,Math.PI*2); ctx.fill(); }
+  // 表情
   ctx.fillStyle='#333';
-  if(face==='happy'){ctx.beginPath(); ctx.arc(x-5,y-2,1.6,0,Math.PI*2); ctx.arc(x+5,y-2,1.6,0,Math.PI*2); ctx.fill();
-                     ctx.strokeStyle='#333'; ctx.lineWidth=1.6; ctx.beginPath(); ctx.arc(x,y+2,6,0,Math.PI,false); ctx.stroke();}
-  else if(face==='lost'){ctx.beginPath(); ctx.arc(x-5,y-2,1.6,0,Math.PI*2); ctx.arc(x+5,y-2,1.6,0,Math.PI*2); ctx.fill();
-                         ctx.strokeStyle='#333'; ctx.lineWidth=1.2; ctx.beginPath(); ctx.moveTo(x-4,y+5); ctx.lineTo(x+4,y+5); ctx.stroke();}
-  else { // meh
-    ctx.beginPath(); ctx.arc(x-5,y-2,1.4,0,Math.PI*2); ctx.arc(x+5,y-2,1.4,0,Math.PI*2); ctx.fill();
-    ctx.fillRect(x-4,y+4,8,2);
-  }
+  if(face==='happy'){ ctx.beginPath(); ctx.arc(x-4,y-11,1.6,0,Math.PI*2); ctx.arc(x+4,y-11,1.6,0,Math.PI*2); ctx.fill(); ctx.strokeStyle='#333'; ctx.lineWidth=1.6; ctx.beginPath(); ctx.arc(x,y-6,5,0,Math.PI,false); ctx.stroke(); }
+  else if(face==='lost'){ ctx.beginPath(); ctx.arc(x-4,y-11,1.6,0,Math.PI*2); ctx.arc(x+4,y-11,1.6,0,Math.PI*2); ctx.fill(); ctx.fillRect(x-4,y-6,8,2); }
+  else { ctx.beginPath(); ctx.arc(x-4,y-11,1.4,0,Math.PI*2); ctx.arc(x+4,y-11,1.4,0,Math.PI*2); ctx.fill(); ctx.fillRect(x-4,y-6,8,2); }
   ctx.restore();
+  resetTransform();
 }
 
 class Resident{
-  constructor(x,y,colorIndex,need){
-    this.x=x;this.y=y;this.vx=0;this.vy=0;this.ci=colorIndex;
-    this.state='idle'; this.goal=null; this.need=need;
-    this.hair=null; // 'short'|'long'
-    this.face='meh';
-    this.escort=false; // 警官付き添い
+  constructor(x,y,ci,need,look){
+    this.x=x;this.y=y;this.vx=0;this.vy=0;this.ci=ci;this.need=need;
+    this.state='idle'; this.goal=null; this.face='meh'; this.hair=null; this.escort=false;
+    this.look=look; // 見た目（服色・髪型初期など）
+    this.walkPhase=Math.random()*Math.PI*2;
   }
-  setGoal(x,y){this.goal={x,y}; this.state='focused';}
+  setGoal(x,y){this.goal={x,y}; this.state='focused'}
   goStation(type){
-    const list=stations.filter(s=>s.type===type); if(!list.length) return false;
+    const list=stations.filter(s=>s.type===type); if(!list.length)return false;
     let best=list[0],bd=Infinity; for(const s of list){const d=(s.x-this.x)**2+(s.y-this.y)**2; if(d<bd){bd=d;best=s;}}
     this.setGoal(best.x,best.y); return true;
   }
   apply(item){
-    const rule=(RULES[this.need]||{})[item.type]; if(!rule){floaters.push(new Floater(this.x,this.y-8,'？','#fff7c2')); return;}
+    const rule=(RULES[this.need]||{})[item.type]; if(!rule){floaters.push(new Floater(this.x,this.y-18,'？','#fff7c2')); return;}
     if(rule.ok){
-      if(rule.hair) this.hair=rule.hair;
+      if(rule.hair) this.hair={style:rule.hair,color:this.look.hair.color};
       if(rule.escort) this.escort=true;
       this.face='happy';
-      if(rule.goTo){ this.goStation(rule.goTo); }
-      else { this.state='resolved'; }
+      if(rule.goTo) this.goStation(rule.goTo); else this.state='resolved';
       pulses.push(new Pulse(this.x,this.y,'#1df294'));
-      floaters.push(new Floater(this.x,this.y-8,rule.msg||'OK','#baffd9'));
+      floaters.push(new Floater(this.x,this.y-18,rule.msg||'OK','#baffd9'));
     }else{
-      this.face = (this.need==='lost' && rule.stillLost) ? 'lost' : 'meh';
+      this.face=(this.need==='lost'&&rule.stillLost)?'lost':'meh';
       if(rule.goTo) this.goStation(rule.goTo);
       pulses.push(new Pulse(this.x,this.y,'#ff6b6b'));
-      floaters.push(new Floater(this.x,this.y-8,rule.msg||'ダメ','#ffd0d0'));
-      // 迷子+電話は彷徨い続ける（goalなし）
+      floaters.push(new Floater(this.x,this.y-18,rule.msg||'…','#ffd0d0'));
     }
   }
   update(dt){
-    let sp=CONFIG.speed*(this.state==='focused'?CONFIG.focusedBoost:1)*(this.escort?1.1:1);
+    const sp=CONFIG.speed*(this.state==='focused'?CONFIG.focusedBoost:1)*(this.escort?1.1:1);
+    this.walkPhase+=dt*6;
     if(this.state==='focused'&&this.goal){
       const dx=this.goal.x-this.x, dy=this.goal.y-this.y, d=Math.hypot(dx,dy)||1, ux=dx/d, uy=dy/d;
       this.vx+=(ux*sp-this.vx)*0.2; this.vy+=(uy*sp-this.vy)*0.2; this.x+=this.vx; this.y+=this.vy;
-      if(d<16){ // 到着
+      if(d<18){ // 到着
         if(this.need==='hair'){ this.state='resolved'; this.face='happy'; }
-        else if(this.need==='lost' && this.escort){ this.state='resolved'; this.face='happy'; this.escort=false; }
+        else if(this.need==='lost'&&this.escort){ this.state='resolved'; this.face='happy'; this.escort=false; }
         else { this.state='resolved'; }
       }
     }else{
@@ -210,89 +258,100 @@ class Resident{
     const pad=CONFIG.world.padding; this.x=clamp(this.x,pad,CONFIG.world.w-pad); this.y=clamp(this.y,pad,CONFIG.world.h-pad);
   }
   draw(){
-    drawChibi(this.x,this.y, COLORS.residents[this.ci], this.hair, this.face);
-    if(this.escort){ // 付き添いバッジ
-      ctx.font='16px system-ui'; ctx.textAlign='center'; ctx.textBaseline='bottom';
-      ctx.fillText('👮', this.x+18, this.y-10);
-    }
+    const base=COLORS.residents[this.ci%COLORS.residents.length];
+    const hair=this.hair || this.look.hair;
+    const step=Math.sin(this.walkPhase);
+    drawBody(this.x,this.y,base,this.face,hair,step);
   }
 }
 
 // ===== Layout/Init =====
-function layoutStations(){
-  stations.length=0; const pad=CONFIG.world.padding; const x=CONFIG.world.w-pad-56; const y0=pad+70, gap=92;
-  stations.push(new Station(x,y0+gap*0,'salon'));
-  stations.push(new Station(x,y0+gap*1,'koban'));
-  stations.push(new Station(x,y0+gap*2,'phone'));
-  stations.push(new Station(x,y0+gap*3,'home'));
-}
-function init(){
-  inspirations.length=0;stations.length=0;residents.length=0;pulses.length=0;floaters.length=0;held=null;
-  layoutStations();
-  const pad=CONFIG.world.padding, cols=COLORS.residents.length;
-  for(let i=0;i<CONFIG.residentsCount;i++){
+function placeWorld(){
+  genCity();
+  inspirations.length=0; residents.length=0; pulses.length=0; floaters.length=0; held=null;
+  // ステーション化
+  stations = stations.map(s=>new Station(s.x,s.y,s.type));
+  // アイテムを街中にバラ撒く
+  for(let i=0;i<24;i++){ const it=ITEMS[Math.floor(Math.random()*ITEMS.length)];
+    inspirations.push(new Inspiration(rand(140,CONFIG.world.w-140), rand(140,CONFIG.world.h-140), it.id)); }
+  // 住人（個性：髪色/髪型）
+  const hairStyles=['short','long','ponytail']; const hairColors=['#222','#6b3a1e','#1e3b6b','#6b1e4f','#2e6b2e'];
+  for(let i=0;i<10;i++){
     const need=NEEDS[i%NEEDS.length].id;
-    residents.push(new Resident(rand(pad+120,CONFIG.world.w-pad-180),rand(pad+80,CONFIG.world.h-pad-80),i%cols,need));
+    const look={hair:{style:hairStyles[Math.floor(Math.random()*hairStyles.length)], color:hairColors[Math.floor(Math.random()*hairColors.length)]}};
+    residents.push(new Resident(rand(200,CONFIG.world.w-200), rand(200,CONFIG.world.h-200), i, need, look));
   }
-  for(let i=0;i<10;i++){ const it=ITEMS[Math.floor(Math.random()*ITEMS.length)];
-    inspirations.push(new Inspiration(rand(pad+60,CONFIG.world.w-pad-90),rand(pad+50,CONFIG.world.h-pad-60),it.id)); }
+  // カメラ初期位置（街の中央を少し引きで）
+  const vs=viewSizeWorld(); cam.x=(CONFIG.world.w-vs.w)/2; cam.y=(CONFIG.world.h-vs.h)/2; cam.z=0.6;
+}
 
-  const legend=document.getElementById('legend');
-  legend.innerHTML = `<div><b>悩み</b>：${NEEDS.map(n=>n.icon+' '+n.label).join(' / ')}</div>
-  <div><b>例</b>：💇×📸→💈で髪型が変わる ／ ❓×📞→まだ迷う ／ ❓×👮→🏠まで付き添い</div>
-  <hr style="border:none;border-top:1px solid rgba(255,255,255,.15);margin:6px 0">
-  <div><b>TIPS</b>：右上はタップで閉じられます</div>`;
+function drawCity(){
+  applyCamera();
+  // 背景
+  ctx.fillStyle='#0f1224'; ctx.fillRect(0,0,CONFIG.world.w,CONFIG.world.h);
+  // 道路グリッド
+  ctx.fillStyle=COLORS.roads;
+  for(let x=0; x<CONFIG.world.w; x+=CONFIG.roadGap){ ctx.fillRect(x,0,CONFIG.roadW,CONFIG.world.h); }
+  for(let y=0; y<CONFIG.world.h; y+=CONFIG.roadGap){ ctx.fillRect(0,y,CONFIG.world.w,CONFIG.roadW); }
+  // 公園
+  ctx.fillStyle=COLORS.park; for(const p of parks){ ctx.fillRect(p.x,p.y,p.w,p.h); }
+  // 建物（屋根のフチ）
+  for(const b of buildings){ ctx.fillStyle=b.c; ctx.fillRect(b.x,b.y,b.w,b.h); ctx.strokeStyle='rgba(0,0,0,.25)'; ctx.lineWidth=2; ctx.strokeRect(b.x,b.y,b.w,b.h); }
+  resetTransform();
 }
 
 // ===== Input =====
 const heldIcon=document.getElementById('heldIcon');
-function updateHeldUI(){heldIcon.textContent=held?((ITEMS.find(i=>i.id===held.type)||{}).icon||'?')+' '+((ITEMS.find(i=>i.id===held.type)||{}).label||held.type):'なし';}
-function posFrom(e){const r=cvs.getBoundingClientRect(); if(e.touches&&e.touches[0]) return {x:e.touches[0].clientX-r.left,y:e.touches[0].clientY-r.top}; return {x:e.clientX-r.left,y:e.clientY-r.top};}
-function nearest(list,x,y,rad){let best=null,b=rad*rad; for(const o of list){const d=(o.x-x)**2+(o.y-y)**2; if(d<=b){b=d;best=o}} return best;}
-function tryPickOrApply(x,y){
-  if(!held){ const i=nearest(inspirations,x,y,28); if(i){held=i; inspirations=inspirations.filter(o=>o!==i); updateHeldUI(); pulses.push(new Pulse(i.x,i.y,'#10e0ff')); return true;} return false; }
-  const r=nearest(residents,x,y,44); if(!r) return false; r.apply(held); held=null; updateHeldUI();
-  // 追加補充
-  const pad=CONFIG.world.padding, it=ITEMS[Math.floor(Math.random()*ITEMS.length)];
-  inspirations.push(new Inspiration(rand(pad+60,CONFIG.world.w-pad-90),rand(pad+50,CONFIG.world.h-pad-60),it.id));
+function updateHeldUI(){ const spec= held ? ITEMS.find(i=>i.id===held.type) : null; heldIcon.textContent = held ? (spec?spec.icon:'?')+' '+(spec?spec.label:held.type) : 'なし'; }
+
+function nearest(list,x,y,rad){ let best=null,b=rad*rad; for(const o of list){const d=(o.x-x)**2+(o.y-y)**2; if(d<=b){b=d;best=o}} return best; }
+
+function tryPickOrApplyWorld(wx,wy){
+  if(!held){ const i=nearest(inspirations,wx,wy,28/cam.z); if(i){held=i; inspirations=inspirations.filter(o=>o!==i); updateHeldUI(); pulses.push(new Pulse(i.x,i.y,'#10e0ff')); return true;} return false; }
+  const r=nearest(residents,wx,wy,44/cam.z); if(!r) return false; r.apply(held); held=null; updateHeldUI();
+  const it=ITEMS[Math.floor(Math.random()*ITEMS.length)]; inspirations.push(new Inspiration(wx+rand(-60,60), wy+rand(-60,60), it.id));
   return true;
 }
-let pressing=false,lastPulse=0;
-cvs.addEventListener('mousedown',e=>{pressing=true;const p=posFrom(e);tryPickOrApply(p.x,p.y);});
-addEventListener('mouseup',()=>pressing=false);
-cvs.addEventListener('mousemove',e=>{if(!pressing)return;const n=performance.now();if(n-lastPulse<160)return;const p=posFrom(e);if(tryPickOrApply(p.x,p.y))lastPulse=n;});
-cvs.addEventListener('touchstart',e=>{e.preventDefault();pressing=true;const p=posFrom(e);tryPickOrApply(p.x,p.y);},{passive:false});
-cvs.addEventListener('touchmove',e=>{e.preventDefault();if(!pressing)return;const n=performance.now();if(n-lastPulse<160)return;const p=posFrom(e);if(tryPickOrApply(p.x,p.y))lastPulse=n;},{passive:false});
-addEventListener('touchend',()=>pressing=false,{passive:true});
+
+// タッチジェスチャ：2本指＝パン＆ピンチ、1本指＝操作
+let fingers=new Map(); let startDist=0,startZ=cam.z,startMid=null;
+cvs.addEventListener('touchstart',e=>{e.preventDefault(); for(const t of e.changedTouches) fingers.set(t.identifier,{x:t.clientX,y:t.clientY}); if(fingers.size===1){ const t=e.changedTouches[0]; const r=cvs.getBoundingClientRect(); const p=screenToWorld(t.clientX-r.left,t.clientY-r.top); tryPickOrApplyWorld(p.x,p.y); } if(fingers.size===2){ const [a,b]=[...fingers.values()]; startDist=Math.hypot(a.x-b.x,a.y-b.y); startZ=cam.z; startMid={x:(a.x+b.x)/2,y:(a.y+b.y)/2}; }},{passive:false});
+cvs.addEventListener('touchmove',e=>{e.preventDefault(); for(const t of e.changedTouches) if(fingers.has(t.identifier)) fingers.set(t.identifier,{x:t.clientX,y:t.clientY}); if(fingers.size===2){ const [a,b]=[...fingers.values()]; const curDist=Math.hypot(a.x-b.x,a.y-b.y); const scale=clamp(curDist/startDist,0.3,3); const r=cvs.getBoundingClientRect(); const midWorldBefore=screenToWorld(startMid.x-r.left,startMid.y-r.top);
+  cam.z=clamp(startZ*scale,zMin,zMax);
+  const midWorldAfter=screenToWorld(startMid.x-r.left,startMid.y-r.top);
+  cam.x+=midWorldBefore.x-midWorldAfter.x; cam.y+=midWorldBefore.y-midWorldAfter.y;
+  const vs=viewSizeWorld(); cam.x=clamp(cam.x,0,CONFIG.world.w-vs.w); cam.y=clamp(cam.y,0,CONFIG.world.h-vs.h); }},{passive:false});
+cvs.addEventListener('touchend',e=>{for(const t of e.changedTouches) fingers.delete(t.identifier);},{passive:true});
+cvs.addEventListener('touchcancel',e=>{for(const t of e.changedTouches) fingers.delete(t.identifier);},{passive:true});
+
+// マウス（デスクトップ）
+let dragging=false,lastMouse={x:0,y:0};
+cvs.addEventListener('mousedown',e=>{if(e.button===0){ const r=cvs.getBoundingClientRect(); const p=screenToWorld(e.clientX-r.left,e.clientY-r.top); tryPickOrApplyWorld(p.x,p.y);} if(e.button===1||e.button===2){dragging=true; lastMouse={x:e.clientX,y:e.clientY};}});
+addEventListener('mousemove',e=>{if(!dragging)return; const dx=(e.clientX-lastMouse.x)/cam.z, dy=(e.clientY-lastMouse.y)/cam.z; cam.x=clamp(cam.x-dx,0,CONFIG.world.w-viewSizeWorld().w); cam.y=clamp(cam.y-dy,0,CONFIG.world.h-viewSizeWorld().h); lastMouse={x:e.clientX,y:e.clientY};});
+addEventListener('mouseup',()=>dragging=false);
+cvs.addEventListener('wheel',e=>{e.preventDefault(); const r=cvs.getBoundingClientRect(); const mx=e.clientX-r.left, my=e.clientY-r.top; const before=screenToWorld(mx,my); cam.z=clamp(cam.z*(e.deltaY>0?0.9:1.1),zMin,zMax); const after=screenToWorld(mx,my); cam.x+=before.x-after.x; cam.y+=before.y-after.y;},{passive:false});
+
+// Zoomボタン
+document.getElementById('zin').onclick=()=>{const cx=CONFIG.world.w/2,cy=CONFIG.world.h/2; cam.z=clamp(cam.z*1.15,zMin,zMax);}
+document.getElementById('zout').onclick=()=>{cam.z=clamp(cam.z*0.87,zMin,zMax);}
+
+// ミニマップ（クリックで移動）
+const mini=document.getElementById('mini');
+mini.addEventListener('click',e=>{
+  const rect=mini.getBoundingClientRect(); const mx=(e.clientX-rect.left-6); const my=(e.clientY-rect.top-6);
+  const mw=rect.width-12, mh=rect.height-12;
+  const sx=mx/mw, sy=my/mh;
+  const vs=viewSizeWorld(); cam.x=clamp(sx*CONFIG.world.w - vs.w/2,0,CONFIG.world.w-vs.w); cam.y=clamp(sy*CONFIG.world.h - vs.h/2,0,CONFIG.world.h-vs.h);
+});
 
 // ===== Loop =====
 let last=performance.now();
-function grid(){const step=24,p=CONFIG.world.padding;ctx.save();ctx.strokeStyle=COLORS.grid;ctx.lineWidth=1;
-  for(let x=p;x<=CONFIG.world.w-p;x+=step){ctx.beginPath();ctx.moveTo(x,p);ctx.lineTo(x,CONFIG.world.h-p);ctx.stroke();}
-  for(let y=p;y<=CONFIG.world.h-p;y+=step){ctx.beginPath();ctx.moveTo(p,y);ctx.lineTo(CONFIG.world.w-p,y);ctx.stroke();}
-  ctx.restore();}
-function loop(){const n=performance.now(),dt=Math.min(.033,(n-last)/1000);last=n;tNow=n/1000;
+function loop(){
+  const n=performance.now(), dt=Math.min(.033,(n-last)/1000); last=n; tNow=n/1000;
+
+  // 更新
   for(const r of residents) r.update(dt);
   for(const f of floaters) f.update(dt); floaters=floaters.filter(f=>f.t<1.2);
   for(const p of pulses) p.update(dt); pulses=pulses.filter(p=>p.life>0);
-  ctx.clearRect(0,0,cvs.width,cvs.height);
-  grid();
-  ctx.save(); ctx.strokeStyle='rgba(255,255,255,.12)'; ctx.lineWidth=2; ctx.roundRect(10,10,CONFIG.world.w-20,CONFIG.world.h-20,16); ctx.stroke(); ctx.restore();
-  for(const s of stations) s.draw();
-  for(const i of inspirations) i.draw();
-  for(const r of residents) r.draw();
-  for(const f of floaters) f.draw();
-  const done=residents.filter(r=>r.state==='resolved').length;
-  document.getElementById('status').innerHTML=`進捗: <b>${done}/${residents.length}</b>　<b>操作</b>: アイテム→住人`;
-  document.getElementById('toast').classList.toggle('show', done===residents.length);
-  requestAnimationFrame(loop);
-}
 
-// Start
-resize(true); init(); updateHeldUI(); loop();
-// Buttons
-document.getElementById('dropBtn').addEventListener('click',()=>{if(!held)return; const p=CONFIG.world.padding; held.x=clamp(held.x||rand(p+60,CONFIG.world.w-p-90),p+40,CONFIG.world.w-40); held.y=clamp(held.y||rand(p+50,CONFIG.world.h-p-60),p+40,CONFIG.world.h-40); inspirations.push(held); held=null; updateHeldUI();});
-document.getElementById('resetBtn').addEventListener('click',()=>{init(); updateHeldUI();});
-</script>
-</body>
-</html>
+  
