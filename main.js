@@ -1,7 +1,7 @@
-// ===== main.js (full replace) =====
+// ===== main.js (FULL REPLACE) =====
 'use strict';
 
-// --- デバッグHUD（常時表示して生存確認） ---
+// --- デバッグHUD（生存確認） ---
 (function () {
   const box = document.createElement('div');
   box.style.cssText =
@@ -17,9 +17,9 @@
 // --- 起動 ---
 cvs = document.getElementById('game');
 ctx = cvs.getContext('2d');
-resize(); // サイズ決定
+resize(); // キャンバスサイズ決定
 
-// 初期カメラを中央へ
+// 初期カメラ：世界の中央へ
 (function initCamCenter() {
   const v = viewSizeWorld();
   cam.x = (CONFIG.world.w - v.w) / 2;
@@ -35,6 +35,25 @@ try {
     if (lg) lg.open = false;
   }
 } catch (e) {}
+
+// --- 診断: 何がロードされてるかをHUDに表示 ---
+function diag(label) {
+  const ok = (x) => (typeof x !== 'undefined' ? (typeof x === 'function' ? 'ƒ' : '●') : '×');
+  const st = document.getElementById('status');
+  const size = (c) => (c && c.width ? `${c.width}x${c.height}` : 'null');
+  if (!st) return;
+  st.innerHTML =
+    `build: <b>${label}</b> / drawCityFast:${ok(window.drawCityFast)} / CITY_LAYER:${size(window.CITY_LAYER)}` +
+    ` / cam: x=${cam.x.toFixed(1)} y=${cam.y.toFixed(1)} z=${cam.z.toFixed(2)}`;
+}
+addEventListener('error', (e) => {
+  const st = document.getElementById('status');
+  if (st) st.innerHTML = 'SCRIPT ERROR: ' + (e.message || e.type);
+});
+addEventListener('unhandledrejection', (e) => {
+  const st = document.getElementById('status');
+  if (st) st.innerHTML = 'PROMISE ERROR: ' + (e.reason && e.reason.message || e.reason);
+});
 
 // --- メインループ ---
 let last = performance.now();
@@ -79,25 +98,20 @@ function loop() {
     // 動くもの
     if (typeof drawEntities === 'function') drawEntities();
 
-    // 上部ステータス（任意）
-    setScreen();
-    const st = document.getElementById('status');
-    if (st && !st.dataset.updated) {
-      // 1度だけ「更新済」フラグを付けておく（ちらつき防止）
-      st.dataset.updated = '1';
-    }
+    // 診断表示
+    diag('perf12');
   }
 
   requestAnimationFrame(loop);
 }
 
-// 初期オブジェクト生成（別ファイル）
+// 初期オブジェクト生成（別ファイル想定）
 if (typeof initEntities === 'function') initEntities();
 loop();
 
-// ====== 入力（ピンチ＝ズーム、1本指ドラッグ＝パン、ホイールズーム、＋/−） ======
+// ===== 入力（ピンチ＝ズーム、1本指ドラッグ＝パン、ホイールズーム、＋/−） =====
 
-// 画面中央を基準にズーム
+// 画面任意点基準でズーム
 function zoomAt(px, py, factor) {
   const before = screenToWorld(px, py);
   cam.z = clamp(cam.z * factor, zMin, zMax);
@@ -109,87 +123,62 @@ function zoomAt(px, py, factor) {
 
 // --- タッチ ---
 let fingers = new Map();
-let startDist = 0,
-  startZ = cam.z,
-  startMid = null;
+let startDist = 0, startZ = cam.z, startMid = null;
 
-function distance(a, b) {
-  return Math.hypot(a.x - b.x, a.y - b.y);
-}
-function midpoint(a, b) {
-  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-}
+function distance(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+function midpoint(a, b) { return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; }
 
-cvs.addEventListener(
-  'touchstart',
-  (e) => {
-    e.preventDefault();
-    for (const t of e.changedTouches) {
-      const o = fingers.get(t.identifier) || { x: t.clientX, y: t.clientY, dx: 0, dy: 0 };
-      o.x = t.clientX;
-      o.y = t.clientY;
-      o.dx = 0;
-      o.dy = 0;
-      fingers.set(t.identifier, o);
-    }
-    if (fingers.size === 2) {
-      const [a, b] = [...fingers.values()];
-      startDist = distance(a, b);
-      startZ = cam.z;
-      startMid = midpoint(a, b);
-    }
-  },
-  { passive: false }
-);
+cvs.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  for (const t of e.changedTouches) {
+    const o = fingers.get(t.identifier) || { x: t.clientX, y: t.clientY, dx: 0, dy: 0 };
+    o.x = t.clientX; o.y = t.clientY; o.dx = 0; o.dy = 0;
+    fingers.set(t.identifier, o);
+  }
+  if (fingers.size === 2) {
+    const [a, b] = [...fingers.values()];
+    startDist = distance(a, b);
+    startZ = cam.z;
+    startMid = midpoint(a, b);
+  }
+}, { passive: false });
 
-cvs.addEventListener(
-  'touchmove',
-  (e) => {
-    e.preventDefault();
-    for (const t of e.changedTouches) {
-      const o = fingers.get(t.identifier);
-      if (!o) continue;
-      o.dx = t.clientX - o.x;
-      o.dy = t.clientY - o.y;
-      o.x = t.clientX;
-      o.y = t.clientY;
-    }
+cvs.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  for (const t of e.changedTouches) {
+    const o = fingers.get(t.identifier);
+    if (!o) continue;
+    o.dx = t.clientX - o.x; o.dy = t.clientY - o.y;
+    o.x = t.clientX; o.y = t.clientY;
+  }
 
-    if (fingers.size === 2) {
-      const [a, b] = [...fingers.values()];
-      const cur = distance(a, b);
-      const scale = clamp(cur / Math.max(1, startDist), 0.3, 3);
-      const r = cvs.getBoundingClientRect();
-      const before = screenToWorld(startMid.x - r.left, startMid.y - r.top);
-      cam.z = clamp(startZ * scale, zMin, zMax);
-      const after = screenToWorld(startMid.x - r.left, startMid.y - r.top);
-      cam.x += before.x - after.x;
-      cam.y += before.y - after.y;
-    } else if (fingers.size === 1) {
-      const [f] = [...fingers.values()];
-      const v = viewSizeWorld();
-      cam.x = clamp(cam.x - f.dx / cam.z, 0, CONFIG.world.w - v.w);
-      cam.y = clamp(cam.y - f.dy / cam.z, 0, CONFIG.world.h - v.h);
-    }
-    sanitizeCam();
-  },
-  { passive: false }
-);
+  if (fingers.size === 2) {
+    const [a, b] = [...fingers.values()];
+    const cur = distance(a, b);
+    const scale = clamp(cur / Math.max(1, startDist), 0.3, 3);
+    const r = cvs.getBoundingClientRect();
+    const before = screenToWorld(startMid.x - r.left, startMid.y - r.top);
+    cam.z = clamp(startZ * scale, zMin, zMax);
+    const after = screenToWorld(startMid.x - r.left, startMid.y - r.top);
+    cam.x += before.x - after.x;
+    cam.y += before.y - after.y;
+  } else if (fingers.size === 1) {
+    const [f] = [...fingers.values()];
+    const v = viewSizeWorld();
+    cam.x = clamp(cam.x - f.dx / cam.z, 0, CONFIG.world.w - v.w);
+    cam.y = clamp(cam.y - f.dy / cam.z, 0, CONFIG.world.h - v.h);
+  }
+  sanitizeCam();
+}, { passive: false });
 
-function endTouches(e) {
-  for (const t of e.changedTouches) fingers.delete(t.identifier);
-}
+function endTouches(e) { for (const t of e.changedTouches) fingers.delete(t.identifier); }
 cvs.addEventListener('touchend', endTouches, { passive: true });
 cvs.addEventListener('touchcancel', endTouches, { passive: true });
 
 // --- マウス（ドラッグでパン / ホイールでズーム） ---
-let dragging = false,
-  lastMouse = { x: 0, y: 0 };
+let dragging = false, lastMouse = { x: 0, y: 0 };
 
-cvs.addEventListener('mousedown', (e) => {
-  dragging = true;
-  lastMouse = { x: e.clientX, y: e.clientY };
-});
+cvs.addEventListener('mousedown', (e) => { dragging = true; lastMouse = { x: e.clientX, y: e.clientY }; });
 addEventListener('mousemove', (e) => {
   if (!dragging) return;
   const dx = (e.clientX - lastMouse.x) / cam.z;
@@ -201,17 +190,12 @@ addEventListener('mousemove', (e) => {
 });
 addEventListener('mouseup', () => (dragging = false));
 
-cvs.addEventListener(
-  'wheel',
-  (e) => {
-    e.preventDefault();
-    const r = cvs.getBoundingClientRect();
-    const mx = e.clientX - r.left,
-      my = e.clientY - r.top;
-    zoomAt(mx, my, e.deltaY > 0 ? 0.9 : 1.1);
-  },
-  { passive: false }
-);
+cvs.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const r = cvs.getBoundingClientRect();
+  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  zoomAt(mx, my, e.deltaY > 0 ? 0.9 : 1.1);
+}, { passive: false });
 
 // --- ＋ / － ボタン ---
 (function () {
