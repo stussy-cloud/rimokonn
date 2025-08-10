@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0f1224"/>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icons/icon-192.png" sizes="192x192">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png">
+  <title>ヒントの町 - Inspiration Prototype (PWA)</title>
+  <style>
+    html, body { height: 100%; margin: 0; background: #0f1224; font-family: system-ui, -apple-system, Segoe UI, Roboto, Noto Sans JP, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; }
+    .wrap { display: grid; place-items: center; height: 100%; gap: 16px; }
+    .hud { position: absolute; inset: 12px 12px auto 12px; color: #e6e7ff; font-size: 14px; line-height: 1.45; pointer-events: none; text-shadow: 0 1px 0 rgba(0,0,0,.35); }
+    .hud h1 { margin: 0 0 8px; font-size: 20px; letter-spacing: .02em; }
+    .pill { display: inline-block; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.15); padding: 3px 8px; border-radius: 999px; margin-right: 8px; }
+
+    .panel { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); color: #e6e7ff; display: grid; gap: 10px; justify-items: center; }
+    .held { display: grid; grid-auto-flow: column; gap: 10px; align-items: center; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12); backdrop-filter: blur(8px); padding: 8px 12px; border-radius: 14px; }
+    .btn { pointer-events: all; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; border: 1px solid rgba(255,255,255,.18); background: linear-gradient(180deg, rgba(255,255,255,.12), rgba(255,255,255,.06)); padding: 8px 12px; border-radius: 12px; color: #fff; text-decoration: none; font-weight: 600; font-size: 13px; }
+
+    canvas { border-radius: 18px; box-shadow: 0 10px 30px rgba(0,0,0,.4), inset 0 0 0 1px rgba(255,255,255,.08); touch-action: none; }
+    .legend { position: absolute; right: 12px; top: 12px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12); color: #e6e7ff; border-radius: 12px; padding: 10px 14px; font-size: 12px; max-width: 240px; }
+    .legend div { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+    .dot { width: 10px; height: 10px; border-radius: 999px; display: inline-block; }
+
+    .toast { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(1); background: rgba(10, 224, 130, .07); border: 1px solid rgba(10, 224, 130, .25); color: #baffd9; padding: 18px 22px; border-radius: 14px; font-size: 16px; text-align: center; pointer-events: none; opacity: 0; transition: opacity .5s ease; }
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <canvas id="game" width="960" height="600" aria-label="game canvas" role="img"></canvas>
+
+    <div class="hud" id="hud">
+      <h1>ヒントの町 <span class="pill">1) 画面内のインスピレーションを選ぶ</span> <span class="pill">2) 住人をタップで与える</span></h1>
+      <div id="status"></div>
+    </div>
+
+    <div class="legend" id="legend"></div>
+
+    <div class="panel">
+      <div class="held" id="heldBox">選択中：<span id="heldIcon">なし</span><button class="btn" id="dropBtn">捨てる</button><button class="btn" id="resetBtn">リセット</button></div>
+    </div>
+
+    <div class="toast" id="toast">みんな落ち着きを取り戻しました！ 🎉</div>
+  </div>
+
+<script>
+// Service Worker registration for PWA
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./service-worker.js').catch(console.warn);
+  });
+}
+
+// ===== Utility =====
+const DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+const rand = (a,b) => a + Math.random()*(b-a);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const dist2 = (ax, ay, bx, by) => { const dx=ax-bx, dy=ay-by; return dx*dx + dy*dy; };
+const nowSec = () => performance.now()/1000;
+
+// ===== Config =====
+const CONFIG = {
+  world: { w: 960, h: 600, padding: 40 },
+  residentsCount: 6,
+  residentRadius: 10,
+  selectRadius: 42,
+  pickRadius: 28,
+  energyMax: 100,
+  energyRecoverPerSec: 12,
+  applyCost: 12,
+  speed: 1.1,
+  focusedBoost: 1.25,
+  confuseDur: 2.8,
+  exploreDur: 3.6,
+};
+
+const INSP_TYPES = [
+  { id:'light', label:'ひらめき', icon:'💡' },
+  { id:'coffee', label:'コーヒー', icon:'☕' },
+  { id:'music', label:'音楽', icon:'♪' },
+  { id:'map', label:'地図', icon:'🗺️' },
+  { id:'chat', label:'会話', icon:'💬' },
+  { id:'book', label:'本', icon:'📘' },
+];
+
+// Theme colors
+const COLORS = {
+  bg: '#0f1224', grid: 'rgba(255,255,255,.04)', aura: '#3ee0ff', text: '#e6e7ff',
+  spots: ['#ff6b6b', '#ffd93d', '#6bcb77', '#6ea8fe'],
+  residents: ['#ff8f8f', '#ffe07d', '#87df9b', '#9ec5fe'],
+};
+
+// ===== Game State =====
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+let residents = []; let spots = []; let pulses = []; let inspirations = [];
+let energy = CONFIG.energyMax; let perfNow = 0; let held = null; let floaters = [];
+
+// ===== Responsive sizing =====
+function computeDesiredSize() {
+  const maxW = 960, maxH = 600, ratio = maxW / maxH;
+  let availW = window.innerWidth - 24; let availH = window.innerHeight - 200;
+  availW = Math.max(320, availW); availH = Math.max(260, availH);
+  let w = Math.min(availW, maxW); let h = Math.min(availH, maxH);
+  if (w / h > ratio) { w = h * ratio; } else { h = w / ratio; }
+  return { w: Math.round(w), h: Math.round(h) };
+}
+function resizeCanvas(reflow=false){
+  const size = computeDesiredSize();
+  CONFIG.world.w = size.w; CONFIG.world.h = size.h;
+  canvas.style.width = size.w + 'px'; canvas.style.height = size.h;
+  canvas.width = Math.floor(size.w * DPR); canvas.height = Math.floor(size.h * DPR);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if (reflow) layoutSpots();
+}
+window.addEventListener('resize', ()=>resizeCanvas(true));
+
+// ===== Entities =====
+class Pulse { constructor(x,y,c){ this.x=x; this.y=y; this.r=0; this.life=1; this.c=c||COLORS.aura; }
+  update(dt){ this.r += 260*dt; this.life -= .8*dt; }
+  draw(){ if (this.life<=0) return; ctx.save(); ctx.beginPath(); ctx.arc(this.x,this.y,this.r,0,Math.PI*2); ctx.strokeStyle=`${this.c}AA`; ctx.lineWidth=2; ctx.stroke(); ctx.restore(); }
+}
+class Floater { constructor(x,y,text,color){ this.x=x; this.y=y; this.text=text; this.color=color||'#fff'; this.t=0; }
+  update(dt){ this.t+=dt; this.y -= 18*dt; }
+  draw(){ const a = Math.max(0, 1 - this.t/1.2); if(a<=0) return; ctx.save(); ctx.globalAlpha=a; ctx.font='bold 14px system-ui, sans-serif'; ctx.textAlign='center'; ctx.textBaseline='bottom'; ctx.fillStyle=this.color; ctx.fillText(this.text, this.x, this.y); ctx.restore(); }
+}
+
+class Spot { constructor(x,y,colorIndex){ this.x=x; this.y=y; this.colorIndex=colorIndex; }
+  draw(){ ctx.save(); ctx.fillStyle = COLORS.spots[this.colorIndex]; ctx.strokeStyle='rgba(255,255,255,.15)'; ctx.lineWidth=2; const size=18;
+    ctx.beginPath(); ctx.roundRect(this.x-size, this.y-size, size*2, size*2, 6); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(this.x,this.y,6,0,Math.PI*2); ctx.fillStyle='rgba(255,255,255,.75)'; ctx.fill(); ctx.restore(); }
+}
+
+class Inspiration { constructor(x,y,type){ this.x=x; this.y=y; this.type=type; this.cooldown=0; }
+  draw(){ ctx.save(); const spec = INSP_TYPES.find(i=>i.id===this.type) || {icon:'?'}; ctx.font='18px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(spec.icon, this.x, this.y); ctx.restore(); }
+}
+
+class Resident {
+  constructor(x,y,colorIndex,trait){
+    this.x=x; this.y=y; this.vx=0; this.vy=0; this.colorIndex=colorIndex; this.trait=trait;
+    this.state='idle'; // 'idle' | 'focused' | 'resolved' | 'confused'
+    this.goal=null; // Spot
+    this.effectUntil=0; this.effectType=null; // 'explore','confused'
+  }
+  assignGoal(spot){ this.goal=spot; this.state='focused'; }
+  reactionFor(insp){
+    const t=this.trait, k=insp.type;
+    const good = (txt)=>({kind:'success', note:txt});
+    const bad  = (txt)=>({kind:'fail', note:txt});
+    const meh  = (txt)=>({kind:'neutral', note:txt});
+    switch(t){
+      case 'logical':
+        if(k==='book'||k==='map') return good('納得した');
+        if(k==='music'||k==='chat') return bad('気が散った');
+        if(k==='light') return good('筋が通った');
+        return meh('様子見');
+      case 'social':
+        if(k==='chat'||k==='music') return good('前向きになった');
+        if(k==='book') return bad('退屈だ');
+        return meh('反応薄');
+      case 'artsy':
+        if(k==='music'||k==='light') return good('インスピレーション！');
+        if(k==='coffee') return bad('落ち着かない');
+        return meh('ピンと来ない');
+      case 'sleepy':
+        if(k==='coffee') return good('目が覚めた');
+        if(k==='light') return bad('まぶしい…');
+        return meh('まだ眠い');
+      case 'balanced':
+        if(k==='map') return good('方向が見えた');
+        return meh('普通');
+      case 'anxious':
+        if(k==='music') return good('落ち着いた');
+        if(k==='coffee') return bad('ソワソワ…');
+        return meh('迷い中');
+    }
+    return meh('様子見');
+  }
+  applyInspiration(insp){
+    const r = this.reactionFor(insp);
+    if(r.kind==='success'){
+      const target=spots.find(s=>s.colorIndex===this.colorIndex); if(target) this.assignGoal(target);
+      this.effectType=null; this.effectUntil=0; return r;
+    }
+    if(r.kind==='fail'){
+      this.state='confused'; this.goal=null; this.effectType='confused'; this.effectUntil=nowSec()+2.8; return r;
+    }
+    this.effectType='explore'; this.effectUntil=nowSec()+3.6; return r;
+  }
+  update(dt){
+    if(this.state==='resolved') return;
+    if(this.effectUntil && nowSec()>this.effectUntil){
+      if(this.state==='confused') this.state='idle';
+      this.effectType=null; this.effectUntil=0;
+    }
+    let speed = 1.1 * (this.state==='focused' ? 1.25 : 1);
+    let wanderAmp = 0.05;
+    if(this.state==='confused'){ wanderAmp = 0.18; }
+    else if(this.effectType==='explore'){
+      wanderAmp = 0.12;
+      const target = spots.find(s=>s.colorIndex===this.colorIndex);
+      if(target){ const d = Math.hypot(target.x-this.x, target.y-this.y); if(d<180) this.assignGoal(target); }
+    }
+    if(this.state==='focused' && this.goal){
+      const dx=this.goal.x-this.x, dy=this.goal.y-this.y, d=Math.hypot(dx,dy)||1, ux=dx/d, uy=dy/d;
+      this.vx += (ux*speed - this.vx)*0.2; this.vy += (uy*speed - this.vy)*0.2; this.x+=this.vx; this.y+=this.vy;
+      if (d<16){ this.state='resolved'; this.vx=this.vy=0; }
+    } else {
+      this.vx += (Math.random()-0.5) * wanderAmp; this.vy += (Math.random()-0.5) * wanderAmp;
+      const v = Math.hypot(this.vx, this.vy)||1; const maxV = speed*0.7; if (v>maxV){ this.vx=this.vx/v*maxV; this.vy=this.vy/v*maxV; }
+      this.x += this.vx; this.y += this.vy;
+    }
+    const pad=40; this.x = Math.max(pad, Math.min(CONFIG.world.w-pad, this.x)); this.y = Math.max(pad, Math.min(CONFIG.world.h-pad, this.y));
+  }
+  draw(){ ctx.save();
+    if (this.state!=='resolved'){ const pulse=.6+Math.sin(perfNow*4 + this.x*.05)*.2; ctx.beginPath(); ctx.arc(this.x,this.y,16,0,Math.PI*2); ctx.strokeStyle=`rgba(62,224,255,${.12+.15*pulse})`; ctx.lineWidth=2; ctx.stroke(); }
+    ctx.beginPath(); ctx.arc(this.x,this.y,10,0,Math.PI*2); ctx.fillStyle=['#ff8f8f','#ffe07d','#87df9b','#9ec5fe'][this.colorIndex]; ctx.fill(); ctx.lineWidth=1.5; ctx.strokeStyle='rgba(255,255,255,.5)'; ctx.stroke();
+    const traitIcon = {logical:'📘', social:'💬', artsy:'✦', sleepy:'😴', balanced:'⚖️', anxious:'💧'}[this.trait] || '•';
+    ctx.font='13px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle='rgba(255,255,255,.95)'; ctx.fillText(traitIcon, this.x, this.y-14);
+    ctx.restore(); }
+}
+
+// ===== Level Init =====
+const legend = document.getElementById('legend');
+function layoutSpots(){ const pad=40; const pos=[{x:pad+70,y:pad+70},{x:960-pad-70,y:pad+70},{x:pad+70,y:600-pad-70},{x:960-pad-70,y:600-pad-70}]; for(let i=0;i<spots.length&&i<pos.length;i++){ spots[i].x=pos[i].x; spots[i].y=pos[i].y; } }
+function initLevel(){ residents=[]; spots=[]; pulses=[]; inspirations=[]; floaters=[]; held=null; energy=100; const pad=40; const colorsCount=4;
+  const spotPositions=[{x:pad+70,y:pad+70},{x:960-pad-70,y:pad+70},{x:pad+70,y:600-pad-70},{x:960-pad-70,y:600-pad-70}];
+  for(let i=0;i<colorsCount;i++) spots.push(new (class Spot{constructor(x,y,colorIndex){this.x=x;this.y=y;this.colorIndex=colorIndex;} draw(){ctx.save();ctx.fillStyle=['#ff6b6b','#ffd93d','#6bcb77','#6ea8fe'][this.colorIndex];ctx.strokeStyle='rgba(255,255,255,.15)';ctx.lineWidth=2;const size=18;ctx.beginPath();ctx.roundRect(this.x-size,this.y-size,size*2,size*2,6);ctx.fill();ctx.stroke();ctx.beginPath();ctx.arc(this.x,this.y,6,0,Math.PI*2);ctx.fillStyle='rgba(255,255,255,.75)';ctx.fill();ctx.restore();}})(spotPositions[i].x, spotPositions[i].y, i));
+  const traits=['logical','social','artsy','sleepy','balanced','anxious'];
+  for(let i=0;i<6;i++){ const c=i%colorsCount; const tr=traits[i%traits.length]; residents.push(new Resident(120+Math.random()*720, 100+Math.random()*400, c, tr)); }
+  for(let i=0;i<8;i++){ const types=['light','coffee','music','map','chat','book']; const t=types[i%types.length]; inspirations.push({x: 100+Math.random()*760, y:80+Math.random()*440, type:t}); }
+  legend.innerHTML = `<div><strong>遊び方：</strong>画面内の <strong>インスピレーション</strong>（💡☕♪🗺️💬📘）をタップして手に取り、住人をタップで与える。住人の <strong>性格</strong> によって反応が変わる（成功/失敗/普通）。</div>`
+    + `<hr style="border:none;border-top:1px solid rgba(255,255,255,.15);margin:8px 0;">`
+    + ['💡 ひらめき','☕ コーヒー','♪ 音楽','🗺️ 地図','💬 会話','📘 本'].map(s=>`<div>${s}</div>`).join('')
+    + `<hr style="border:none;border-top:1px solid rgba(255,255,255,.15);margin:8px 0;">`
+    + `<div>性格：📘=論理、💬=社交、✦=創造、😴=ねむい、⚖️=バランス、💧=不安気味</div>`;
+}
+
+// ===== UI held box =====
+const heldIcon = document.getElementById('heldIcon'); let held=null;
+function updateHeldUI(){ if(!held) heldIcon.textContent='なし'; else { const map={light:'💡 ひらめき',coffee:'☕ コーヒー',music:'♪ 音楽',map:'🗺️ 地図',chat:'💬 会話',book:'📘 本'}; heldIcon.textContent = map[held.type] || held.type; } }
+
+// ===== Input =====
+function pointerPosFromEvent(e){ const rect=canvas.getBoundingClientRect(); if(e.touches&&e.touches[0]) return {x:e.touches[0].clientX-rect.left, y:e.touches[0].clientY-rect.top}; return {x:e.clientX-rect.left, y:e.clientY-rect.top}; }
+function nearestResident(x,y){ let best=null, bestD2=42*42; for(const r of residents){ if(r.state==='resolved') continue; const dx=x-r.x, dy=y-r.y; const d2=dx*dx+dy*dy; if(d2<=bestD2){ bestD2=d2; best=r; } } return best; }
+function nearestInspiration(x,y){ let best=null, bestD2=28*28; for(const I of inspirations){ const dx=x-I.x, dy=y-I.y; const d2=dx*dx+dy*dy; if(d2<=bestD2){ bestD2=d2; best=I; } } return best; }
+
+function tryPickOrApply(x,y){
+  if(!held){
+    const I = nearestInspiration(x,y); if(I){ held = I; inspirations = inspirations.filter(o=>o!==I); updateHeldUI(); return true; }
+    return false;
+  } else {
+    const r = nearestResident(x,y); if(!r) return false;
+    const spec = (new Resident(0,0,0,'balanced')).reactionFor({type:held.type}); // not used directly; kept simple in this minimized PWA
+    const out = r.applyInspiration({type:held.type});
+    held=null; updateHeldUI();
+    inspirations.push({x: 100+Math.random()*760, y:80+Math.random()*440, type:['light','coffee','music','map','chat','book'][Math.floor(Math.random()*6)]});
+    return true;
+  }
+}
+
+let pressing=false, lastPulseAt=0;
+canvas.addEventListener('mousedown', e=>{ pressing=true; const p=pointerPosFromEvent(e); tryPickOrApply(p.x,p.y); });
+canvas.addEventListener('mouseup', ()=>{ pressing=false; });
+canvas.addEventListener('mouseleave', ()=>{ pressing=false; });
+canvas.addEventListener('touchstart', e=>{ e.preventDefault(); pressing=true; const p=pointerPosFromEvent(e); tryPickOrApply(p.x,p.y); }, {passive:false});
+canvas.addEventListener('touchend', ()=>{ pressing=false; }, {passive:true});
+
+// ===== Loop =====
+let last=performance.now();
+function drawGrid(){ const step=24; ctx.save(); ctx.strokeStyle='rgba(255,255,255,.04)'; ctx.lineWidth=1; for(let x=40; x<=960-40; x+=step){ ctx.beginPath(); ctx.moveTo(x, 40); ctx.lineTo(x, 600-40); ctx.stroke(); } for(let y=40; y<=600-40; y+=step){ ctx.beginPath(); ctx.moveTo(40, y); ctx.lineTo(960-40, y); ctx.stroke(); } ctx.restore(); }
+function loop(){ const n=performance.now(); const dt=Math.min(.033, (n-last)/1000); last=n; perfNow=n/1000;
+  for(const r of residents) r.update(dt);
+  ctx.clearRect(0,0,canvas.width, canvas.height); ctx.fillStyle='#0f1224'; ctx.fillRect(0,0,960, 600);
+  drawGrid();
+  ctx.save(); ctx.strokeStyle='rgba(255,255,255,.12)'; ctx.lineWidth=2; ctx.roundRect(10,10,960-20, 600-20, 16); ctx.stroke(); ctx.restore();
+  // spots
+  for(const s of spots) s.draw();
+  // inspirations
+  ctx.save(); ctx.font='18px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  for(const I of inspirations){ const map={light:'💡',coffee:'☕',music:'♪',map:'🗺️',chat:'💬',book:'📘'}; ctx.fillText(map[I.type]||'?', I.x, I.y); } ctx.restore();
+  // residents
+  for(const r of residents) r.draw();
+  const allResolved=residents.every(r=>r.state==='resolved'); const toast=document.getElementById('toast'); if(allResolved) toast.classList.add('show'); else toast.classList.remove('show');
+  requestAnimationFrame(loop); }
+initLevel(); updateHeldUI(); resizeCanvas(); loop();
+
+document.getElementById('dropBtn').addEventListener('click', ()=>{ if(!held) return; inspirations.push({x: held.x || 100+Math.random()*760, y: held.y || 80+Math.random()*440, type: held.type}); held=null; updateHeldUI(); });
+document.getElementById('resetBtn').addEventListener('click', ()=>{ initLevel(); updateHeldUI(); });
+</script>
+</body>
+</html>
