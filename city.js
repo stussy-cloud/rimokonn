@@ -1,11 +1,4 @@
-// ====== 街のジオメトリ＆描画 ======
-function drawCrosswalk(x,y,w,h,step=10){ ctx.fillStyle=PALETTE.zebra; for(let i=0;i<w;i+=step*2){ ctx.fillRect(x+i,y,step,h); } }
-function drawTree(x,y){ ctx.fillStyle='rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(x,y+12,14,6,0,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle='#2e7d32'; ctx.beginPath(); ctx.arc(x,y,16,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#5b8a3a'; ctx.beginPath(); ctx.arc(x-8,y+2,10,0,Math.PI*2); ctx.arc(x+9,y+1,8,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle='#7b4a2b'; ctx.fillRect(x-3,y,6,16); }
-function drawBench(x,y){ ctx.fillStyle='#a06c3f'; ctx.fillRect(x-18,y,36,6); ctx.fillRect(x-18,y-8,36,6); ctx.fillStyle='#6d4726'; ctx.fillRect(x-16,y+6,4,10); ctx.fillRect(x+12,y+6,4,10); }
-function drawVending(x,y){ ctx.fillStyle='#4fa3ff'; ctx.roundRect(x-10,y-18,20,36,4); ctx.fill(); ctx.fillStyle='#eaf5ff'; ctx.fillRect(x-8,y-16,16,10); ctx.fillRect(x-8,y-4,16,12); ctx.fillStyle='#c8ddff'; ctx.fillRect(x-6,y-2,12,2); ctx.fillRect(x-6,y+2,12,2); }
-
+// ====== 街の生成 ======
 function genCity(){
   buildings.length=0; parks.length=0; props.length=0; stationPoints.length=0;
   const G=CONFIG.roadGap, W=CONFIG.roadW, SW=CONFIG.sidewalk;
@@ -36,38 +29,87 @@ function genCity(){
       }
     }
   }
-
-  if(buildings.length===0){ // 最低保証
+  if(buildings.length===0){
     buildings.push({x:400,y:300,w:120,h:80,type:'salon',c:'#6ec1ff'});
     stationPoints.push({x:460,y:340,type:'salon'});
   }
 }
 
-function drawBuilding(b){
-  ctx.fillStyle='#1b1f3c'; ctx.fillRect(b.x-4, b.y-4, b.w+8, b.h+8); // 歩道
-  ctx.fillStyle=b.c; ctx.strokeStyle='rgba(0,0,0,.25)'; ctx.lineWidth=3; ctx.fillRect(b.x,b.y,b.w,b.h); ctx.strokeRect(b.x,b.y,b.w,b.h);
-  ctx.fillStyle='#ffffff14'; ctx.fillRect(b.x, b.y, b.w, 6); // 屋根ライン
-  ctx.fillStyle=PALETTE.window; const cols=Math.max(2,Math.floor(b.w/24)), rows=Math.max(1,Math.floor(b.h/28));
-  for(let i=0;i<cols;i++){ for(let j=0;j<rows;j++){ const wx=b.x+8+i*(b.w-16)/(cols-1), wy=b.y+10+j*(b.h-18)/(rows-1); ctx.fillRect(wx-5,wy-6,10,12); } }
-  if(['cafe','book','salon','koban','phone'].includes(b.type)){
-    const label = b.type==='cafe'?'☕': b.type==='book'?'📚': b.type==='salon'?'💈': b.type==='koban'?'👮':'📞';
-    ctx.fillStyle=PALETTE.awning; ctx.roundRect(b.x+6,b.y+b.h-18,40,14,6); ctx.fill();
-    ctx.fillStyle='#fff'; ctx.font='12px system-ui'; ctx.textAlign='left'; ctx.textBaseline='middle'; ctx.fillText(label, b.x+12, b.y+b.h-11);
-  }
-}
+// ====== 静的レイヤをキャッシュ ======
+let CITY_LAYER=null;
+function buildCityLayer(){
+  const can=document.createElement('canvas');
+  can.width=CONFIG.world.w; can.height=CONFIG.world.h;
+  const g=can.getContext('2d');
 
-function drawCity(){
-  ctx.fillStyle='#0c1026'; ctx.fillRect(0,0,CONFIG.world.w,CONFIG.world.h); // 地面
-  ctx.fillStyle=PALETTE.road; // 道路
-  for(let x=0; x<CONFIG.world.w; x+=CONFIG.roadGap){ ctx.fillRect(x,0,CONFIG.roadW,CONFIG.world.h); }
-  for(let y=0; y<CONFIG.world.h; y+=CONFIG.roadGap){ ctx.fillRect(0,y,CONFIG.world.w,CONFIG.roadW); }
-  for(let x=0; x<CONFIG.world.w; x+=CONFIG.roadGap){ // 横断歩道
+  // 地面
+  g.fillStyle='#0c1026'; g.fillRect(0,0,CONFIG.world.w,CONFIG.world.h);
+
+  // 道路（グリッド）
+  g.fillStyle=PALETTE.road;
+  for(let x=0; x<CONFIG.world.w; x+=CONFIG.roadGap){ g.fillRect(x,0,CONFIG.roadW,CONFIG.world.h); }
+  for(let y=0; y<CONFIG.world.h; y+=CONFIG.roadGap){ g.fillRect(0,y,CONFIG.world.w,CONFIG.roadW); }
+
+  // 横断歩道
+  const step=10;
+  g.fillStyle=PALETTE.zebra;
+  for(let x=0; x<CONFIG.world.w; x+=CONFIG.roadGap){
     for(let y=0; y<CONFIG.world.h; y+=CONFIG.roadGap){
-      drawCrosswalk(x-30, y+CONFIG.roadW/2-6, 60, 12);
-      drawCrosswalk(x+CONFIG.roadW/2-6, y-30, 12, 60);
+      for(let i=0;i<60;i+=step*2){ g.fillRect(x-30+i, y+CONFIG.roadW/2-6, step, 12); }
+      for(let i=0;i<60;i+=step*2){ g.fillRect(x+CONFIG.roadW/2-6, y-30+i, 12, step); }
     }
   }
-  ctx.fillStyle=PALETTE.grass; for(const p of parks){ ctx.fillRect(p.x,p.y,p.w,p.h); }
-  buildings.sort((a,b)=>a.y-b.y); for(const b of buildings){ drawBuilding(b); }
-  for(const pr of props){ if(pr.kind==='tree') drawTree(pr.x,pr.y); if(pr.kind==='bench') drawBench(pr.x,pr.y); if(pr.kind==='vending') drawVending(pr.x,pr.y); }
+
+  // 公園
+  g.fillStyle=PALETTE.grass; for(const p of parks){ g.fillRect(p.x,p.y,p.w,p.h); }
+
+  // 建物（軽量化：ウィンドウ密度を落とす）
+  const density = PERF.low ? 0.6 : 1.0;
+  for(const b of buildings.sort((a,b)=>a.y-b.y)){
+    g.fillStyle='#1b1f3c'; g.fillRect(b.x-4,b.y-4,b.w+8,b.h+8);
+    g.fillStyle=b.c; g.strokeStyle='rgba(0,0,0,.25)'; g.lineWidth=3; g.fillRect(b.x,b.y,b.w,b.h); g.strokeRect(b.x,b.y,b.w,b.h);
+    g.fillStyle='#ffffff14'; g.fillRect(b.x,b.y,b.w,6);
+
+    g.fillStyle=PALETTE.window;
+    const cols=Math.max(2,Math.floor(b.w/24*density)), rows=Math.max(1,Math.floor(b.h/28*density));
+    for(let i=0;i<cols;i++){
+      for(let j=0;j<rows;j++){
+        const wx=b.x+8+i*(b.w-16)/(cols-1), wy=b.y+10+j*(b.h-18)/(rows-1);
+        g.fillRect(wx-5,wy-6,10,12);
+      }
+    }
+
+    if(['cafe','book','salon','koban','phone'].includes(b.type)){
+      const label=b.type==='cafe'?'☕': b.type==='book'?'📚': b.type==='salon'?'💈': b.type==='koban'?'👮':'📞';
+      // 簡易オーニング
+      g.fillStyle=PALETTE.awning; g.beginPath();
+      g.moveTo(b.x+6,b.y+b.h-18); g.lineTo(b.x+46,b.y+b.h-18); g.lineTo(b.x+46,b.y+b.h-4); g.lineTo(b.x+6,b.y+b.h-4); g.closePath(); g.fill();
+      g.fillStyle='#fff'; g.font='12px system-ui'; g.textAlign='left'; g.textBaseline='middle'; g.fillText(label, b.x+12, b.y+b.h-11);
+    }
+  }
+
+  // 小物
+  for(const pr of props){
+    if(pr.kind==='tree'){
+      g.fillStyle='rgba(0,0,0,.25)'; g.beginPath(); g.ellipse(pr.x,pr.y+12,14,6,0,0,Math.PI*2); g.fill();
+      g.fillStyle='#2e7d32'; g.beginPath(); g.arc(pr.x,pr.y,16,0,Math.PI*2); g.fill();
+      g.fillStyle='#5b8a3a'; g.beginPath(); g.arc(pr.x-8,pr.y+2,10,0,Math.PI*2); g.arc(pr.x+9,pr.y+1,8,0,Math.PI*2); g.fill();
+      g.fillStyle='#7b4a2b'; g.fillRect(pr.x-3,pr.y,6,16);
+    }else if(pr.kind==='bench'){
+      g.fillStyle='#a06c3f'; g.fillRect(pr.x-18,pr.y,36,6); g.fillRect(pr.x-18,pr.y-8,36,6);
+      g.fillStyle='#6d4726'; g.fillRect(pr.x-16,pr.y+6,4,10); g.fillRect(pr.x+12,pr.y+6,4,10);
+    }else if(pr.kind==='vending'){
+      g.fillStyle='#4fa3ff'; g.fillRect(pr.x-10,pr.y-18,20,36);
+      g.fillStyle='#eaf5ff'; g.fillRect(pr.x-8,pr.y-16,16,10); g.fillRect(pr.x-8,pr.y-4,16,12);
+      g.fillStyle='#c8ddff'; g.fillRect(pr.x-6,pr.y-2,12,2); g.fillRect(pr.x-6,pr.y+2,12,2);
+    }
+  }
+
+  CITY_LAYER = can;
+}
+
+// 毎フレームはキャッシュを貼るだけ
+function drawCity(){
+  if(!CITY_LAYER) buildCityLayer();
+  ctx.drawImage(CITY_LAYER, 0, 0);
 }
