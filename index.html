@@ -4,27 +4,25 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#0f1224"/>
-  <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="icon" href="./icons/icon-192.png" sizes="192x192">
-  <link rel="apple-touch-icon" href="./icons/icon-192.png">
-  <title>ヒントの町 - Inspiration Prototype (PWA)</title>
+  <title>ヒントの町 – Needs/Stations v0.3</title>
   <style>
-    html, body { height: 100%; margin: 0; background: #0f1224; font-family: system-ui, -apple-system, Segoe UI, Roboto, Noto Sans JP, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; }
+    html, body { height: 100%; margin: 0; background: #0f1224; color:#e6e7ff; font-family: system-ui, -apple-system, Segoe UI, Roboto, Noto Sans JP, Helvetica, Arial; }
     .wrap { display: grid; place-items: center; height: 100%; gap: 16px; }
-    .hud { position: absolute; inset: 12px 12px auto 12px; color: #e6e7ff; font-size: 14px; line-height: 1.45; pointer-events: none; text-shadow: 0 1px 0 rgba(0,0,0,.35); }
+    .hud { position: absolute; inset: 12px 12px auto 12px; font-size: 14px; line-height: 1.45; pointer-events: none; text-shadow: 0 1px 0 rgba(0,0,0,.35); }
     .hud h1 { margin: 0 0 8px; font-size: 20px; letter-spacing: .02em; }
     .pill { display: inline-block; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.15); padding: 3px 8px; border-radius: 999px; margin-right: 8px; }
-
-    .panel { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); color: #e6e7ff; display: grid; gap: 10px; justify-items: center; }
+    .panel { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); display: grid; gap: 10px; justify-items: center; }
     .held { display: grid; grid-auto-flow: column; gap: 10px; align-items: center; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12); backdrop-filter: blur(8px); padding: 8px 12px; border-radius: 14px; }
     .btn { pointer-events: all; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; border: 1px solid rgba(255,255,255,.18); background: linear-gradient(180deg, rgba(255,255,255,.12), rgba(255,255,255,.06)); padding: 8px 12px; border-radius: 12px; color: #fff; text-decoration: none; font-weight: 600; font-size: 13px; }
-
+    .btn.small { padding:4px 8px; font-size:12px; }
     canvas { border-radius: 18px; box-shadow: 0 10px 30px rgba(0,0,0,.4), inset 0 0 0 1px rgba(255,255,255,.08); touch-action: none; }
-    .legend { position: absolute; right: 12px; top: 12px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12); color: #e6e7ff; border-radius: 12px; padding: 10px 14px; font-size: 12px; max-width: 240px; }
-    .legend div { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
-    .dot { width: 10px; height: 10px; border-radius: 999px; display: inline-block; }
-
-    .toast { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(1); background: rgba(10, 224, 130, .07); border: 1px solid rgba(10, 224, 130, .25); color: #baffd9; padding: 18px 22px; border-radius: 14px; font-size: 16px; text-align: center; pointer-events: none; opacity: 0; transition: opacity .5s ease; }
+    /* 開閉できるヘルプ（プルダウン） */
+    details.legend { position: absolute; right: 12px; top: 12px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12); border-radius: 12px; padding: 6px 10px; font-size: 12px; max-width: 260px; }
+    details.legend summary { cursor: pointer; list-style: none; user-select: none; outline: none; }
+    details.legend summary::-webkit-details-marker { display: none; }
+    details.legend[open] { background: rgba(255,255,255,.08); }
+    .legend-body div { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+    .toast { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(1); background: rgba(10,224,130,.07); border: 1px solid rgba(10,224,130,.25); color: #baffd9; padding: 18px 22px; border-radius: 14px; font-size: 16px; text-align: center; pointer-events: none; opacity: 0; transition: opacity .5s ease; }
     .toast.show { opacity: 1; }
   </style>
 </head>
@@ -33,29 +31,35 @@
     <canvas id="game" width="960" height="600" aria-label="game canvas" role="img"></canvas>
 
     <div class="hud" id="hud">
-      <h1>ヒントの町 <span class="pill">1) 画面内のインスピレーションを選ぶ</span> <span class="pill">2) 住人をタップで与える</span></h1>
+      <h1>ヒントの町 <span class="pill">1) 画面内のアイテムを拾う</span> <span class="pill">2) 住人に与える</span></h1>
       <div id="status"></div>
     </div>
 
-    <div class="legend" id="legend"></div>
+    <!-- ★ プルダウン（開く/閉じる） -->
+    <details class="legend" id="legendWrap" open>
+      <summary>ℹ️ ヘルプ</summary>
+      <div id="legend" class="legend-body"></div>
+    </details>
 
     <div class="panel">
-      <div class="held" id="heldBox">選択中：<span id="heldIcon">なし</span><button class="btn" id="dropBtn">捨てる</button><button class="btn" id="resetBtn">リセット</button></div>
+      <div class="held" id="heldBox">選択中：<span id="heldIcon">なし</span>
+        <button class="btn small" id="dropBtn">捨てる</button>
+        <button class="btn small" id="resetBtn">リセット</button>
+      </div>
     </div>
 
     <div class="toast" id="toast">みんな落ち着きを取り戻しました！ 🎉</div>
   </div>
 
 <script>
-// Service Worker registration for PWA
+// ---- Service Worker（PWA） ----
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./service-worker.js').catch(console.warn);
   });
 }
-</script>
-<script>
-// …Service Worker登録の直後あたりに追加
+
+// ---- Polyfill: roundRect ----
 if (!CanvasRenderingContext2D.prototype.roundRect) {
   CanvasRenderingContext2D.prototype.roundRect = function (x,y,w,h,r){
     const m = Math.min(w,h); if(r>m/2) r=m/2;
@@ -70,246 +74,277 @@ if (!CanvasRenderingContext2D.prototype.roundRect) {
   };
 }
 
-// ===== Utility =====
+// ---- Util ----
 const DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
 const rand = (a,b) => a + Math.random()*(b-a);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const dist2 = (ax, ay, bx, by) => { const dx=ax-bx, dy=ay-by; return dx*dx + dy*dy; };
 const nowSec = () => performance.now()/1000;
 
-// ===== Config =====
+// ---- Config & Data ----
 const CONFIG = {
   world: { w: 960, h: 600, padding: 40 },
   residentsCount: 6,
   residentRadius: 10,
-  selectRadius: 42,
-  pickRadius: 28,
-  energyMax: 100,
-  energyRecoverPerSec: 12,
-  applyCost: 12,
-  speed: 1.1,
-  focusedBoost: 1.25,
-  confuseDur: 2.8,
-  exploreDur: 3.6,
+  selectRadius: 42, pickRadius: 28,
+  speed: 1.1, focusedBoost: 1.25,
 };
 
+const COLORS = {
+  bg: '#0f1224', grid: 'rgba(255,255,255,.04)',
+  residents: ['#ff8f8f','#ffe07d','#87df9b','#9ec5fe']
+};
+
+// 表示用アイテム（拾って与える）
 const INSP_TYPES = [
-  { id:'light', label:'ひらめき', icon:'💡' },
+  { id:'light',  label:'ひらめき', icon:'💡' },
   { id:'coffee', label:'コーヒー', icon:'☕' },
-  { id:'music', label:'音楽', icon:'♪' },
-  { id:'map', label:'地図', icon:'🗺️' },
-  { id:'chat', label:'会話', icon:'💬' },
-  { id:'book', label:'本', icon:'📘' },
+  { id:'music',  label:'音楽',     icon:'♪' },
+  { id:'map',    label:'地図',     icon:'🗺️' },
+  { id:'chat',   label:'会話',     icon:'💬' },
+  { id:'book',   label:'本',       icon:'📘' },
+  // 追加：行動を変える具体アイテム
+  { id:'photo_short', label:'髪型写真(ショート)', icon:'📸' },
+  { id:'photo_long',  label:'髪型写真(ロング)',   icon:'📸' },
+  { id:'police', label:'交番', icon:'👮' },
+  { id:'phone',  label:'公衆電話', icon:'📞' },
 ];
 
-// Theme colors
-const COLORS = {
-  bg: '#0f1224', grid: 'rgba(255,255,255,.04)', aura: '#3ee0ff', text: '#e6e7ff',
-  spots: ['#ff6b6b', '#ffd93d', '#6bcb77', '#6ea8fe'],
-  residents: ['#ff8f8f', '#ffe07d', '#87df9b', '#9ec5fe'],
+// 住人の「悩み」タイプ
+const NEED_TYPES = [
+  { id:'hair', icon:'💇', label:'髪型に迷い中' },
+  { id:'lost', icon:'❓', label:'道に迷い中' },
+];
+
+// 目的地（到達で解決）
+const STATION_TYPES = [
+  { id:'salon', icon:'💈', label:'サロン' },
+  { id:'koban', icon:'👮', label:'交番' },
+  { id:'phone', icon:'📞', label:'公衆電話' },
+];
+
+// ルール表： need × item → 成功/失敗、行き先、バッジ
+const RULES = {
+  hair: {
+    photo_short: { ok:true,  goTo:'salon', badge:'✂️ショート' },
+    photo_long:  { ok:true,  goTo:'salon', badge:'✂️ロング'  },
+    map:         { ok:false, note:'髪型の話では…' },
+    police:      { ok:false, note:'それは違う気が…' },
+  },
+  lost: {
+    police: { ok:true,  goTo:'koban', note:'交番へ' },
+    phone:  { ok:true,  goTo:'phone', note:'電話で相談' },
+    map:    { ok:true,  goTo:null,    note:'地図で解決！' }, // その場で解決
+  }
 };
 
-// ===== Game State =====
+// ---- State ----
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
-let residents = []; let spots = []; let pulses = []; let inspirations = [];
-let energy = CONFIG.energyMax; let perfNow = 0; let held = null; let floaters = [];
+let residents = [], inspirations = [], stations = [], pulses = [], floaters = [];
+let perfNow = 0, held = null;
 
-// ===== Responsive sizing =====
+// ---- Responsive ----
 function computeDesiredSize() {
   const maxW = 960, maxH = 600, ratio = maxW / maxH;
-  let availW = window.innerWidth - 24; let availH = window.innerHeight - 200;
+  let availW = window.innerWidth - 24, availH = window.innerHeight - 200;
   availW = Math.max(320, availW); availH = Math.max(260, availH);
-  let w = Math.min(availW, maxW); let h = Math.min(availH, maxH);
+  let w = Math.min(availW, maxW), h = Math.min(availH, maxH);
   if (w / h > ratio) { w = h * ratio; } else { h = w / ratio; }
   return { w: Math.round(w), h: Math.round(h) };
 }
-function resizeCanvas(reflow = false){
+function resizeCanvas(reflow=false){
   const size = computeDesiredSize();
-  CONFIG.world.w = size.w;
-  CONFIG.world.h = size.h;
+  CONFIG.world.w = size.w; CONFIG.world.h = size.h;
   canvas.style.width  = size.w + 'px';
-  canvas.style.height = size.h + 'px';   // ← ここがpx付きの修正点
+  canvas.style.height = size.h + 'px';
   canvas.width  = Math.floor(size.w * DPR);
   canvas.height = Math.floor(size.h * DPR);
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  if (reflow) layoutSpots();
+  if (reflow) layoutStations();
 }
 window.addEventListener('resize', ()=>resizeCanvas(true));
 
-// ===== Entities =====
-class Pulse { constructor(x,y,c){ this.x=x; this.y=y; this.r=0; this.life=1; this.c=c||COLORS.aura; }
+// ---- Entities ----
+class Pulse { constructor(x,y,c){ this.x=x; this.y=y; this.r=0; this.life=1; this.c=c||'#3ee0ff'; }
   update(dt){ this.r += 260*dt; this.life -= .8*dt; }
-  draw(){ if (this.life<=0) return; ctx.save(); ctx.beginPath(); ctx.arc(this.x,this.y,this.r,0,Math.PI*2); ctx.strokeStyle=`${this.c}AA`; ctx.lineWidth=2; ctx.stroke(); ctx.restore(); }
-}
+  draw(){ if (this.life<=0) return; ctx.save(); ctx.beginPath(); ctx.arc(this.x,this.y,this.r,0,Math.PI*2); ctx.strokeStyle=`${this.c}AA`; ctx.lineWidth=2; ctx.stroke(); ctx.restore(); } }
+
 class Floater { constructor(x,y,text,color){ this.x=x; this.y=y; this.text=text; this.color=color||'#fff'; this.t=0; }
   update(dt){ this.t+=dt; this.y -= 18*dt; }
-  draw(){ const a = Math.max(0, 1 - this.t/1.2); if(a<=0) return; ctx.save(); ctx.globalAlpha=a; ctx.font='bold 14px system-ui, sans-serif'; ctx.textAlign='center'; ctx.textBaseline='bottom'; ctx.fillStyle=this.color; ctx.fillText(this.text, this.x, this.y); ctx.restore(); }
-}
+  draw(){ const a = Math.max(0, 1 - this.t/1.2); if(a<=0) return; ctx.save(); ctx.globalAlpha=a; ctx.font='bold 14px system-ui'; ctx.textAlign='center'; ctx.textBaseline='bottom'; ctx.fillStyle=this.color; ctx.fillText(this.text, this.x, this.y); ctx.restore(); } }
 
-class Spot { constructor(x,y,colorIndex){ this.x=x; this.y=y; this.colorIndex=colorIndex; }
-  draw(){ ctx.save(); ctx.fillStyle = COLORS.spots[this.colorIndex]; ctx.strokeStyle='rgba(255,255,255,.15)'; ctx.lineWidth=2; const size=18;
-    ctx.beginPath(); ctx.roundRect(this.x-size, this.y-size, size*2, size*2, 6); ctx.fill(); ctx.stroke();
-    ctx.beginPath(); ctx.arc(this.x,this.y,6,0,Math.PI*2); ctx.fillStyle='rgba(255,255,255,.75)'; ctx.fill(); ctx.restore(); }
-}
+class Station { constructor(x,y,type){ this.x=x; this.y=y; this.type=type; }
+  draw(){ ctx.save(); ctx.fillStyle='rgba(255,255,255,.08)'; ctx.strokeStyle='rgba(255,255,255,.18)'; ctx.lineWidth=2; ctx.roundRect(this.x-22, this.y-16, 44, 32, 8); ctx.fill(); ctx.stroke();
+    const spec=STATION_TYPES.find(s=>s.id===this.type); ctx.font='18px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle='#fff'; ctx.fillText(spec?spec.icon:'?', this.x, this.y); ctx.restore(); } }
 
-class Inspiration { constructor(x,y,type){ this.x=x; this.y=y; this.type=type; this.cooldown=0; }
-  draw(){ ctx.save(); const spec = INSP_TYPES.find(i=>i.id===this.type) || {icon:'?'}; ctx.font='18px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(spec.icon, this.x, this.y); ctx.restore(); }
-}
+class Inspiration { constructor(x,y,type){ this.x=x; this.y=y; this.type=type; }
+  draw(){ const spec = INSP_TYPES.find(i=>i.id===this.type); ctx.save(); ctx.font='18px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle='#fff'; ctx.fillText(spec?spec.icon:'?', this.x, this.y); ctx.restore(); } }
 
 class Resident {
-  constructor(x,y,colorIndex,trait){
-    this.x=x; this.y=y; this.vx=0; this.vy=0; this.colorIndex=colorIndex; this.trait=trait;
-    this.state='idle'; // 'idle' | 'focused' | 'resolved' | 'confused'
-    this.goal=null; // Spot
-    this.effectUntil=0; this.effectType=null; // 'explore','confused'
+  constructor(x,y,colorIndex,need){
+    this.x=x; this.y=y; this.vx=0; this.vy=0; this.colorIndex=colorIndex;
+    this.state='idle'; this.goal=null; this.need=need; this.badge=null; // badge: 例) ✂️ショート
   }
-  assignGoal(spot){ this.goal=spot; this.state='focused'; }
-  reactionFor(insp){
-    const t=this.trait, k=insp.type;
-    const good = (txt)=>({kind:'success', note:txt});
-    const bad  = (txt)=>({kind:'fail', note:txt});
-    const meh  = (txt)=>({kind:'neutral', note:txt});
-    switch(t){
-      case 'logical':
-        if(k==='book'||k==='map') return good('納得した');
-        if(k==='music'||k==='chat') return bad('気が散った');
-        if(k==='light') return good('筋が通った');
-        return meh('様子見');
-      case 'social':
-        if(k==='chat'||k==='music') return good('前向きになった');
-        if(k==='book') return bad('退屈だ');
-        return meh('反応薄');
-      case 'artsy':
-        if(k==='music'||k==='light') return good('インスピレーション！');
-        if(k==='coffee') return bad('落ち着かない');
-        return meh('ピンと来ない');
-      case 'sleepy':
-        if(k==='coffee') return good('目が覚めた');
-        if(k==='light') return bad('まぶしい…');
-        return meh('まだ眠い');
-      case 'balanced':
-        if(k==='map') return good('方向が見えた');
-        return meh('普通');
-      case 'anxious':
-        if(k==='music') return good('落ち着いた');
-        if(k==='coffee') return bad('ソワソワ…');
-        return meh('迷い中');
-    }
-    return meh('様子見');
+  assignGoal(x,y){ this.goal={x,y}; this.state='focused'; }
+  assignStationGoal(type){
+    const st = stations.filter(s=>s.type===type);
+    if(!st.length) return false;
+    // 一番近い地点へ
+    let best=st[0], bd=Infinity;
+    for(const s of st){ const d=(s.x-this.x)**2+(s.y-this.y)**2; if(d<bd){ bd=d; best=s; } }
+    this.assignGoal(best.x, best.y); return true;
   }
-  applyInspiration(insp){
-    const r = this.reactionFor(insp);
-    if(r.kind==='success'){
-      const target=spots.find(s=>s.colorIndex===this.colorIndex); if(target) this.assignGoal(target);
-      this.effectType=null; this.effectUntil=0; return r;
+  applyItem(item){
+    const rule = (RULES[this.need]||{})[item.type];
+    if(!rule){ floaters.push(new Floater(this.x,this.y-6,'ピンと来ない','#fff7c2')); pulses.push(new Pulse(this.x,this.y,'#ffe27a')); return; }
+    if(rule.ok){
+      if(rule.badge) this.badge = rule.badge;
+      if(rule.goTo){ this.assignStationGoal(rule.goTo); }
+      else { this.state='resolved'; }
+      floaters.push(new Floater(this.x,this.y-6, rule.note || 'うん、これだ！', '#baffd9'));
+      pulses.push(new Pulse(this.x,this.y,'#1df294'));
+    } else {
+      this.state='idle'; // 失敗でも一旦落ち着く
+      floaters.push(new Floater(this.x,this.y-6, rule.note || 'うーん…', '#ffd0d0'));
+      pulses.push(new Pulse(this.x,this.y,'#ff5f5f'));
     }
-    if(r.kind==='fail'){
-      this.state='confused'; this.goal=null; this.effectType='confused'; this.effectUntil=nowSec()+2.8; return r;
-    }
-    this.effectType='explore'; this.effectUntil=nowSec()+3.6; return r;
   }
   update(dt){
     if(this.state==='resolved') return;
-    if(this.effectUntil && nowSec()>this.effectUntil){
-      if(this.state==='confused') this.state='idle';
-      this.effectType=null; this.effectUntil=0;
-    }
-    let speed = 1.1 * (this.state==='focused' ? 1.25 : 1);
-    let wanderAmp = 0.05;
-    if(this.state==='confused'){ wanderAmp = 0.18; }
-    else if(this.effectType==='explore'){
-      wanderAmp = 0.12;
-      const target = spots.find(s=>s.colorIndex===this.colorIndex);
-      if(target){ const d = Math.hypot(target.x-this.x, target.y-this.y); if(d<180) this.assignGoal(target); }
-    }
+    let speed = CONFIG.speed * (this.state==='focused' ? CONFIG.focusedBoost : 1);
+    // 移動
     if(this.state==='focused' && this.goal){
       const dx=this.goal.x-this.x, dy=this.goal.y-this.y, d=Math.hypot(dx,dy)||1, ux=dx/d, uy=dy/d;
-      this.vx += (ux*speed - this.vx)*0.2; this.vy += (uy*speed - this.vy)*0.2; this.x+=this.vx; this.y+=this.vy;
+      this.vx += (ux*speed - this.vx)*0.2; this.vy += (uy*speed - this.vy)*0.2;
+      this.x+=this.vx; this.y+=this.vy;
       if (d<16){ this.state='resolved'; this.vx=this.vy=0; }
     } else {
-      this.vx += (Math.random()-0.5) * wanderAmp; this.vy += (Math.random()-0.5) * wanderAmp;
+      this.vx += (Math.random()-0.5) * 0.06;
+      this.vy += (Math.random()-0.5) * 0.06;
       const v = Math.hypot(this.vx, this.vy)||1; const maxV = speed*0.7; if (v>maxV){ this.vx=this.vx/v*maxV; this.vy=this.vy/v*maxV; }
-      this.x += this.vx; this.y += this.vy;
+      this.x+=this.vx; this.y+=this.vy;
     }
-    const pad=40; this.x = Math.max(pad, Math.min(CONFIG.world.w-pad, this.x)); this.y = Math.max(pad, Math.min(CONFIG.world.h-pad, this.y));
+    const pad=CONFIG.world.padding; this.x = clamp(this.x,pad,CONFIG.world.w-pad); this.y = clamp(this.y,pad,CONFIG.world.h-pad);
   }
   draw(){ ctx.save();
-    if (this.state!=='resolved'){ const pulse=.6+Math.sin(perfNow*4 + this.x*.05)*.2; ctx.beginPath(); ctx.arc(this.x,this.y,16,0,Math.PI*2); ctx.strokeStyle=`rgba(62,224,255,${.12+.15*pulse})`; ctx.lineWidth=2; ctx.stroke(); }
-    ctx.beginPath(); ctx.arc(this.x,this.y,10,0,Math.PI*2); ctx.fillStyle=['#ff8f8f','#ffe07d','#87df9b','#9ec5fe'][this.colorIndex]; ctx.fill(); ctx.lineWidth=1.5; ctx.strokeStyle='rgba(255,255,255,.5)'; ctx.stroke();
-    const traitIcon = {logical:'📘', social:'💬', artsy:'✦', sleepy:'😴', balanced:'⚖️', anxious:'💧'}[this.trait] || '•';
-    ctx.font='13px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle='rgba(255,255,255,.95)'; ctx.fillText(traitIcon, this.x, this.y-14);
+    // body
+    ctx.beginPath(); ctx.arc(this.x,this.y,CONFIG.residentRadius,0,Math.PI*2);
+    ctx.fillStyle=COLORS.residents[this.colorIndex]; ctx.fill(); ctx.lineWidth=1.5; ctx.strokeStyle='rgba(255,255,255,.5)'; ctx.stroke();
+    // need/badge
+    ctx.font='13px system-ui'; ctx.textAlign='center'; ctx.textBaseline='bottom';
+    if(!this.badge){ const n=NEED_TYPES.find(n=>n.id===this.need); if(n) ctx.fillText(n.icon, this.x, this.y-14); }
+    else ctx.fillText(this.badge, this.x, this.y-14);
     ctx.restore(); }
 }
 
-// ===== Level Init =====
+// ---- Layout / Init ----
 const legend = document.getElementById('legend');
-function layoutSpots(){ const pad=40; const pos=[{x:pad+70,y:pad+70},{x:960-pad-70,y:pad+70},{x:pad+70,y:600-pad-70},{x:960-pad-70,y:600-pad-70}]; for(let i=0;i<spots.length&&i<pos.length;i++){ spots[i].x=pos[i].x; spots[i].y=pos[i].y; } }
-function initLevel(){ residents=[]; spots=[]; pulses=[]; inspirations=[]; floaters=[]; held=null; energy=100; const pad=40; const colorsCount=4;
-  const spotPositions=[{x:pad+70,y:pad+70},{x:960-pad-70,y:pad+70},{x:pad+70,y:600-pad-70},{x:960-pad-70,y:600-pad-70}];
-  for(let i=0;i<colorsCount;i++) spots.push(new (class Spot{constructor(x,y,colorIndex){this.x=x;this.y=y;this.colorIndex=colorIndex;} draw(){ctx.save();ctx.fillStyle=['#ff6b6b','#ffd93d','#6bcb77','#6ea8fe'][this.colorIndex];ctx.strokeStyle='rgba(255,255,255,.15)';ctx.lineWidth=2;const size=18;ctx.beginPath();ctx.roundRect(this.x-size,this.y-size,size*2,size*2,6);ctx.fill();ctx.stroke();ctx.beginPath();ctx.arc(this.x,this.y,6,0,Math.PI*2);ctx.fillStyle='rgba(255,255,255,.75)';ctx.fill();ctx.restore();}})(spotPositions[i].x, spotPositions[i].y, i));
-  const traits=['logical','social','artsy','sleepy','balanced','anxious'];
-  for(let i=0;i<6;i++){ const c=i%colorsCount; const tr=traits[i%traits.length]; residents.push(new Resident(120+Math.random()*720, 100+Math.random()*400, c, tr)); }
-  for(let i=0;i<8;i++){ const types=['light','coffee','music','map','chat','book']; const t=types[i%types.length]; inspirations.push({x: 100+Math.random()*760, y:80+Math.random()*440, type:t}); }
-  legend.innerHTML = `<div><strong>遊び方：</strong>画面内の <strong>インスピレーション</strong>（💡☕♪🗺️💬📘）をタップして手に取り、住人をタップで与える。住人の <strong>性格</strong> によって反応が変わる（成功/失敗/普通）。</div>`
-    + `<hr style="border:none;border-top:1px solid rgba(255,255,255,.15);margin:8px 0;">`
-    + ['💡 ひらめき','☕ コーヒー','♪ 音楽','🗺️ 地図','💬 会話','📘 本'].map(s=>`<div>${s}</div>`).join('')
-    + `<hr style="border:none;border-top:1px solid rgba(255,255,255,.15);margin:8px 0;">`
-    + `<div>性格：📘=論理、💬=社交、✦=創造、😴=ねむい、⚖️=バランス、💧=不安気味</div>`;
+function layoutStations(){
+  stations.length = 0;
+  const pad=CONFIG.world.padding;
+  // 右側縦に3つ設置
+  const x = CONFIG.world.w - pad - 60;
+  const y0 = pad + 60, gap = 90;
+  stations.push(new Station(x, y0 + gap*0, 'salon'));
+  stations.push(new Station(x, y0 + gap*1, 'koban'));
+  stations.push(new Station(x, y0 + gap*2, 'phone'));
+}
+function initLevel(){
+  residents.length=0; inspirations.length=0; floaters.length=0; pulses.length=0; held=null;
+  layoutStations();
+  const pad=CONFIG.world.padding; const colorsCount=COLORS.residents.length;
+  // 住人生成（悩みを割当）
+  for(let i=0;i<CONFIG.residentsCount;i++){
+    const need = NEED_TYPES[i % NEED_TYPES.length].id;  // デモ：交互に割当
+    residents.push(new Resident(rand(pad+120, CONFIG.world.w-pad-180), rand(pad+80, CONFIG.world.h-pad-80), i%colorsCount, need));
+  }
+  // アイテムを散らす（既存+追加）
+  const pool = INSP_TYPES;
+  for(let i=0;i<10;i++){ const t = pool[Math.floor(Math.random()*pool.length)]; inspirations.push(new Inspiration(rand(pad+60, CONFIG.world.w-pad-90), rand(pad+50, CONFIG.world.h-pad-50), t.id)); }
+
+  legend.innerHTML =
+    `<div><strong>遊び方</strong>：画面のアイテム（💡☕♪🗺️💬📘📸👮📞）をタップで手に取り、住人をタップで与える。住人の <strong>悩み</strong>（${NEED_TYPES.map(n=>n.icon).join(' ')}) によって反応や行き先が変わる。</div>` +
+    `<hr style="border:none;border-top:1px solid rgba(255,255,255,.15);margin:6px 0;">` +
+    `<div><strong>例</strong>：💇×📸=サロンへ / ❓×👮=交番へ / ❓×📞=電話へ / ❓×🗺️=その場で解決</div>`;
 }
 
-// ===== UI held box =====
+// ---- Held UI ----
 const heldIcon = document.getElementById('heldIcon');
-function updateHeldUI(){ if(!held) heldIcon.textContent='なし'; else { const map={light:'💡 ひらめき',coffee:'☕ コーヒー',music:'♪ 音楽',map:'🗺️ 地図',chat:'💬 会話',book:'📘 本'}; heldIcon.textContent = map[held.type] || held.type; } }
+function updateHeldUI(){ if(!held) heldIcon.textContent='なし'; else { const spec=INSP_TYPES.find(i=>i.id===held.type); heldIcon.textContent = spec ? `${spec.icon} ${spec.label}` : held.type; } }
 
-// ===== Input =====
-function pointerPosFromEvent(e){ const rect=canvas.getBoundingClientRect(); if(e.touches&&e.touches[0]) return {x:e.touches[0].clientX-rect.left, y:e.touches[0].clientY-rect.top}; return {x:e.clientX-rect.left, y:e.clientY-rect.top}; }
-function nearestResident(x,y){ let best=null, bestD2=42*42; for(const r of residents){ if(r.state==='resolved') continue; const dx=x-r.x, dy=y-r.y; const d2=dx*dx+dy*dy; if(d2<=bestD2){ bestD2=d2; best=r; } } return best; }
-function nearestInspiration(x,y){ let best=null, bestD2=28*28; for(const I of inspirations){ const dx=x-I.x, dy=y-I.y; const d2=dx*dx+dy*dy; if(d2<=bestD2){ bestD2=d2; best=I; } } return best; }
+// ---- Input ----
+function pointerPosFromEvent(e){ const r=canvas.getBoundingClientRect(); if(e.touches&&e.touches[0]) return {x:e.touches[0].clientX-r.left, y:e.touches[0].clientY-r.top}; return {x:e.clientX-r.left, y:e.clientY-r.top}; }
+function nearestResident(x,y){ let best=null, bestD2=CONFIG.selectRadius*CONFIG.selectRadius; for(const r of residents){ if(r.state==='resolved') continue; const dx=x-r.x, dy=y-r.y, d2=dx*dx+dy*dy; if(d2<=bestD2){ bestD2=d2; best=r; } } return best; }
+function nearestInspiration(x,y){ let best=null, bestD2=CONFIG.pickRadius*CONFIG.pickRadius; for(const i of inspirations){ const dx=x-i.x, dy=y-i.y, d2=dx*dx+dy*dy; if(d2<=bestD2){ bestD2=d2; best=i; } } return best; }
 
 function tryPickOrApply(x,y){
   if(!held){
-    const I = nearestInspiration(x,y); if(I){ held = I; inspirations = inspirations.filter(o=>o!==I); updateHeldUI(); return true; }
+    const I = nearestInspiration(x,y); if(I){ held=I; inspirations=inspirations.filter(o=>o!==I); updateHeldUI(); pulses.push(new Pulse(I.x,I.y,'#10e0ff')); return true; }
     return false;
   } else {
     const r = nearestResident(x,y); if(!r) return false;
-    const spec = (new Resident(0,0,0,'balanced')).reactionFor({type:held.type}); // not used directly; kept simple in this minimized PWA
-    const out = r.applyInspiration({type:held.type});
-    held=null; updateHeldUI();
-    inspirations.push({x: 100+Math.random()*760, y:80+Math.random()*440, type:['light','coffee','music','map','chat','book'][Math.floor(Math.random()*6)]});
+    r.applyItem(held); held=null; updateHeldUI();
+    // 新規アイテムをランダム補充
+    const pad=CONFIG.world.padding; const t = INSP_TYPES[Math.floor(Math.random()*INSP_TYPES.length)];
+    inspirations.push(new Inspiration(rand(pad+60, CONFIG.world.w-pad-90), rand(pad+50, CONFIG.world.h-pad-50), t.id));
     return true;
   }
 }
-
 let pressing=false, lastPulseAt=0;
 canvas.addEventListener('mousedown', e=>{ pressing=true; const p=pointerPosFromEvent(e); tryPickOrApply(p.x,p.y); });
 canvas.addEventListener('mouseup', ()=>{ pressing=false; });
-canvas.addEventListener('mouseleave', ()=>{ pressing=false; });
+canvas.addEventListener('mousemove', e=>{ if(!pressing) return; const now=performance.now(); if(now-lastPulseAt<160) return; const p=pointerPosFromEvent(e); if(tryPickOrApply(p.x,p.y)) lastPulseAt=now; });
 canvas.addEventListener('touchstart', e=>{ e.preventDefault(); pressing=true; const p=pointerPosFromEvent(e); tryPickOrApply(p.x,p.y); }, {passive:false});
+canvas.addEventListener('touchmove', e=>{ e.preventDefault(); if(!pressing) return; const now=performance.now(); if(now-lastPulseAt<160) return; const p=pointerPosFromEvent(e); if(tryPickOrApply(p.x,p.y)) lastPulseAt=now; }, {passive:false});
 canvas.addEventListener('touchend', ()=>{ pressing=false; }, {passive:true});
+canvas.addEventListener('touchcancel', ()=>{ pressing=false; }, {passive:true});
 
-// ===== Loop =====
+// ---- Loop ----
 let last=performance.now();
-function drawGrid(){ const step=24; ctx.save(); ctx.strokeStyle='rgba(255,255,255,.04)'; ctx.lineWidth=1; for(let x=40; x<=960-40; x+=step){ ctx.beginPath(); ctx.moveTo(x, 40); ctx.lineTo(x, 600-40); ctx.stroke(); } for(let y=40; y<=600-40; y+=step){ ctx.beginPath(); ctx.moveTo(40, y); ctx.lineTo(960-40, y); ctx.stroke(); } ctx.restore(); }
-function loop(){ const n=performance.now(); const dt=Math.min(.033, (n-last)/1000); last=n; perfNow=n/1000;
+function drawGrid(){
+  const step=24, pad=CONFIG.world.padding;
+  ctx.save(); ctx.strokeStyle=COLORS.grid; ctx.lineWidth=1;
+  for(let x=pad; x<=CONFIG.world.w-pad; x+=step){ ctx.beginPath(); ctx.moveTo(x, pad); ctx.lineTo(x, CONFIG.world.h-pad); ctx.stroke(); }
+  for(let y=pad; y<=CONFIG.world.h-pad; y+=step){ ctx.beginPath(); ctx.moveTo(pad, y); ctx.lineTo(CONFIG.world.w-pad, y); ctx.stroke(); }
+  ctx.restore();
+}
+function loop(){
+  const n=performance.now(); const dt=Math.min(.033, (n-last)/1000); last=n; perfNow=n/1000;
   for(const r of residents) r.update(dt);
-  ctx.clearRect(0,0,canvas.width, canvas.height); ctx.fillStyle='#0f1224'; ctx.fillRect(0,0,960, 600);
+  for(const f of floaters) f.update(dt); floaters=floaters.filter(f=>f.t<1.2);
+  for(const p of pulses) p.update(dt);  pulses=pulses.filter(p=>p.life>0);
+
+  ctx.clearRect(0,0,canvas.width, canvas.height);
+  ctx.fillStyle=COLORS.bg; ctx.fillRect(0,0,CONFIG.world.w, CONFIG.world.h);
   drawGrid();
-  ctx.save(); ctx.strokeStyle='rgba(255,255,255,.12)'; ctx.lineWidth=2; ctx.roundRect(10,10,960-20, 600-20, 16); ctx.stroke(); ctx.restore();
-  // spots
-  for(const s of spots) s.draw();
-  // inspirations
-  ctx.save(); ctx.font='18px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle';
-  for(const I of inspirations){ const map={light:'💡',coffee:'☕',music:'♪',map:'🗺️',chat:'💬',book:'📘'}; ctx.fillText(map[I.type]||'?', I.x, I.y); } ctx.restore();
-  // residents
+
+  // フレーム
+  ctx.save(); ctx.strokeStyle='rgba(255,255,255,.12)'; ctx.lineWidth=2; ctx.roundRect(10,10,CONFIG.world.w-20, CONFIG.world.h-20, 16); ctx.stroke(); ctx.restore();
+
+  // 駅（目的地）
+  for(const s of stations) s.draw();
+  // アイテム
+  for(const I of inspirations) I.draw();
+  // 住人
   for(const r of residents) r.draw();
-  const allResolved=residents.every(r=>r.state==='resolved'); const toast=document.getElementById('toast'); if(allResolved) toast.classList.add('show'); else toast.classList.remove('show');
-  requestAnimationFrame(loop); }
-initLevel(); updateHeldUI(); resizeCanvas(); loop();
+  // 飛び文字
+  for(const f of floaters) f.draw();
 
-setInterval(()=>{ document.getElementById('status').textContent = 'tick ' + Math.floor(performance.now()/1000); }, 500);
+  // 全員解決トースト
+  const allResolved = residents.every(r=>r.state==='resolved');
+  document.getElementById('toast').classList.toggle('show', allResolved);
 
-document.getElementById('dropBtn').addEventListener('click', ()=>{ if(!held) return; inspirations.push({x: held.x || 100+Math.random()*760, y: held.y || 80+Math.random()*440, type: held.type}); held=null; updateHeldUI(); });
+  // HUD
+  const done = residents.filter(r=>r.state==='resolved').length;
+  document.getElementById('status').innerHTML = `進捗: <strong>${done}/${residents.length}</strong>　<span class="pill">タップして拾い→住人に与える</span>`;
+  requestAnimationFrame(loop);
+}
+
+// ---- Start ----
+resizeCanvas(true); initLevel(); updateHeldUI(); loop();
+
+// ボタン
+document.getElementById('dropBtn').addEventListener('click', ()=>{ if(!held) return; const pad=CONFIG.world.padding; held.x = clamp(held.x||rand(pad+60, CONFIG.world.w-pad-90), pad+40, CONFIG.world.w-40); held.y = clamp(held.y||rand(pad+50, CONFIG.world.h-pad-50), pad+40, CONFIG.world.h-40); inspirations.push(held); held=null; updateHeldUI(); });
 document.getElementById('resetBtn').addEventListener('click', ()=>{ initLevel(); updateHeldUI(); });
 </script>
 </body>
