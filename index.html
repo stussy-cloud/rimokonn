@@ -125,11 +125,14 @@ function computeDesiredSize() {
   if (w / h > ratio) { w = h * ratio; } else { h = w / ratio; }
   return { w: Math.round(w), h: Math.round(h) };
 }
-function resizeCanvas(reflow=false){
+function resizeCanvas(reflow = false){
   const size = computeDesiredSize();
-  CONFIG.world.w = size.w; CONFIG.world.h = size.h;
-  canvas.style.width = size.w + 'px'; canvas.style.height = size.h;
-  canvas.width = Math.floor(size.w * DPR); canvas.height = Math.floor(size.h * DPR);
+  CONFIG.world.w = size.w;
+  CONFIG.world.h = size.h;
+  canvas.style.width  = size.w + 'px';
+  canvas.style.height = size.h + 'px';   // ← ここがpx付きの修正点
+  canvas.width  = Math.floor(size.w * DPR);
+  canvas.height = Math.floor(size.h * DPR);
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   if (reflow) layoutSpots();
 }
