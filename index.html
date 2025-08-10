@@ -308,6 +308,8 @@ function loop(){ const n=performance.now(); const dt=Math.min(.033, (n-last)/100
   requestAnimationFrame(loop); }
 initLevel(); updateHeldUI(); resizeCanvas(); loop();
 
+setInterval(()=>{ document.getElementById('status').textContent = 'tick ' + Math.floor(performance.now()/1000); }, 500);
+
 document.getElementById('dropBtn').addEventListener('click', ()=>{ if(!held) return; inspirations.push({x: held.x || 100+Math.random()*760, y: held.y || 80+Math.random()*440, type: held.type}); held=null; updateHeldUI(); });
 document.getElementById('resetBtn').addEventListener('click', ()=>{ initLevel(); updateHeldUI(); });
 </script>
