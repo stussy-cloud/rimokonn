@@ -1,28 +1,34 @@
-// ====== デバッグHUDとSW登録、メインループ ======
+// ====== 強制デバッグHUD（DOMContentLoaded 済みでも表示） ======
 (function(){
   if(!DEBUG_HUD) return;
   const box=document.createElement('div');
   box.style.cssText='position:fixed;left:8px;bottom:8px;background:rgba(0,0,0,.6);color:#fff;padding:6px 8px;border-radius:8px;font:12px/1.4 system-ui;z-index:99999';
-  box.id='debugHud'; box.textContent='boot';
-  window.addEventListener('DOMContentLoaded',()=>document.body.appendChild(box));
+  box.id='debugHud'; box.textContent='boot(main.js)';
+  const mount=()=>document.body.appendChild(box);
+  if(document.readyState==='loading'){ window.addEventListener('DOMContentLoaded',mount); } else { mount(); }
   const log=msg=>box.textContent=msg;
   window.addEventListener('error',e=>log('Error: '+e.message));
   window.addEventListener('unhandledrejection',e=>log('Promise: '+(e.reason&&e.reason.message||e.reason)));
   setInterval(()=>log('tick '+Math.floor(performance.now()/1000)),800);
 })();
 
+// SW登録（無ければ警告だけ）
 if('serviceWorker' in navigator){
   addEventListener('load',()=>navigator.serviceWorker.register('./service-worker.js').catch(console.warn));
 }
 
-// Canvas取得（他ファイルの関数は実行時にctxを見るのでここでOK）
+// Canvas取得
 cvs=document.getElementById('game'); ctx=cvs.getContext('2d');
 
 let last=performance.now();
 function loop(){
   const n=performance.now(), dt=Math.min(.033,(n-last)/1000); last=n;
 
-  setScreen(); ctx.fillStyle='#102040'; ctx.fillRect(0,0,cvs.width/DPR,cvs.height/DPR); // 強制ペイント
+  // 画面を必ず塗る（これが見えれば main.js は動いている）
+  setScreen(); ctx.fillStyle='#102040'; ctx.fillRect(0,0,cvs.width/DPR,cvs.height/DPR);
+  ctx.fillStyle='#8cf'; ctx.font='bold 16px system-ui';
+  ctx.fillText('BOOT OK', 12, 24);
+
   sanitizeCam();
 
   for(const r of residents) r.update(dt);
