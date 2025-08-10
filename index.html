@@ -4,12 +4,11 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <meta name="theme-color" content="#0f1224"/>
-<title>ヒントの町 – ポップシティ v0.6</title>
+<title>ヒントの町 – ポップシティ v0.6.2</title>
 <style>
   :root{
     --bg1:#0f1224; --bg2:#15193a; --ink:#e6e7ff;
     --pane:rgba(255,255,255,.08); --pane2:rgba(255,255,255,.12);
-    --line:#171a34; --accent:#76a9ff;
   }
   html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg1),var(--bg2));color:var(--ink);
     font-family:system-ui,-apple-system,Segoe UI,Roboto,Noto Sans JP,Helvetica,Arial}
@@ -23,8 +22,7 @@
   details.legend summary{cursor:pointer;list-style:none;user-select:none}
   .legend-body div{display:flex;gap:8px;align-items:center;margin:4px 0}
   .panel{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);display:grid;gap:10px;justify-items:center}
-  .held{display:grid;grid-auto-flow:column;gap:10px;align-items:center;background:var(--pane);border:1px solid var(--pane2);
-    backdrop-filter:blur(8px);padding:8px 12px;border-radius:14px}
+  .held{display:grid;grid-auto-flow:column;gap:10px;align-items:center;background:var(--pane);border:1px solid var(--pane2);backdrop-filter:blur(8px);padding:8px 12px;border-radius:14px}
   .btn{pointer-events:all;cursor:pointer;display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(255,255,255,.18);
     background:linear-gradient(180deg,rgba(255,255,255,.12),rgba(255,255,255,.06));padding:6px 10px;border-radius:12px;color:#fff;text-decoration:none;font-weight:700;font-size:12px}
   .zoomBtns{position:absolute;right:12px;bottom:12px;display:grid;gap:8px}
@@ -35,7 +33,7 @@
   <canvas id="game" width="960" height="600" aria-label="game"></canvas>
 
   <div class="hud">
-    <h1>ヒントの町 v0.6 <span class="pill">タップ: 拾う/与える</span><span class="pill">ピンチ: ズーム</span><span class="pill">2本指ドラッグ: パン</span></h1>
+    <h1>ヒントの町 v0.6.2 <span class="pill">タップ: 拾う/与える</span><span class="pill">ピンチ: ズーム</span><span class="pill">2本指ドラッグ: パン</span></h1>
     <div id="status"></div>
   </div>
 
@@ -57,14 +55,22 @@
   </div>
 </div>
 
+<!-- 0) SWをワンタップで無効化できる安全スイッチ（?killsw=1 で有効） -->
 <script>
-/*** ===== ユーティリティ & ポリフィル ===== ***/
+(() => {
+  const qs = new URLSearchParams(location.search);
+  if (qs.get('killsw') === '1' && 'serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(regs => {
+      regs.forEach(r => r.unregister());
+      location.replace(location.origin + location.pathname + '?nocache=' + Date.now());
+    });
+  }
+})();
+</script>
+
+<script>
+/*** ===== デバッグHUD ===== ***/
 const DEBUG_HUD = true;
-
-// SW登録
-if('serviceWorker' in navigator){ addEventListener('load',()=>navigator.serviceWorker.register('./service-worker.js').catch(console.warn)); }
-
-// デバッグHUD
 (function(){
   if(!DEBUG_HUD) return;
   const box=document.createElement('div');
@@ -77,7 +83,12 @@ if('serviceWorker' in navigator){ addEventListener('load',()=>navigator.serviceW
   setInterval(()=>log('tick '+Math.floor(performance.now()/1000)),800);
 })();
 
-// roundRect / ellipse
+/*** ===== SW登録 ===== ***/
+if('serviceWorker' in navigator){
+  addEventListener('load',()=>navigator.serviceWorker.register('./service-worker.js').catch(console.warn));
+}
+
+/*** ===== Polyfills ===== ***/
 if(!CanvasRenderingContext2D.prototype.roundRect){
   CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){
     const m=Math.min(w,h); if(r>m/2) r=m/2;
@@ -96,38 +107,24 @@ if(!CanvasRenderingContext2D.prototype.ellipse){
   };
 }
 
+/*** ===== Util ===== ***/
 const DPR=Math.max(1,Math.min(2,window.devicePixelRatio||1));
 const rand=(a,b)=>a+Math.random()*(b-a);
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const pick=a=>a[(Math.random()*a.length)|0];
 
-/*** ===== コンフィグ ===== ***/
-const CONFIG={
-  world:{w:3600,h:2400,padding:100},           // さらに広大に
-  speed:1.18, focusedBoost:1.35, r:16,
-  roadGap:240, roadW:36, sidewalk:18
-};
+/*** ===== Config & Palette ===== ***/
+const CONFIG={ world:{w:3600,h:2400,padding:100}, speed:1.18, focusedBoost:1.35, r:16, roadGap:240, roadW:36, sidewalk:18 };
 const PALETTE={
-  ink:'#e6e7ff', line:'#171a34',
-  road:'#2a2f52', zebra:'#dfe7ff',
-  grass:'#1d4d2c', tree:'#2e7d32', bench:'#a06c3f', pole:'#8aa0c9',
+  road:'#2a2f52', zebra:'#dfe7ff', grass:'#1d4d2c',
   buildBase:['#6ec1ff','#ffd166','#7bd389','#f49ac2','#95d0fc','#ffc2a8'],
-  buildRoof:'#233156', window:'#eff5ff', awning:'#ff6b6b',
+  window:'#eff5ff', awning:'#ff6b6b',
   npcClothes:['#ff7aa2','#ffd166','#7bd389','#7bb6ff','#f49ac2','#95d0fc']
 };
 
-// アイテム（ヒント）
-const ITEMS=[
-  {id:'photo_short',label:'髪型(ショート)',icon:'📸'},
-  {id:'photo_long', label:'髪型(ロング)',  icon:'📸'},
-  {id:'map',        label:'地図',           icon:'🗺️'},
-  {id:'police',     label:'交番',           icon:'👮'},
-  {id:'phone',      label:'公衆電話',       icon:'📞'},
-  {id:'music',      label:'音楽',           icon:'♪'},
-  {id:'light',      label:'ひらめき',       icon:'💡'},
-];
-
-// 悩み / 目的地 / ルール
+// ヒント/悩み/目的地/ルール
+const ITEMS=[{id:'photo_short',label:'髪型(ショート)',icon:'📸'},{id:'photo_long',label:'髪型(ロング)',icon:'📸'},
+  {id:'map',label:'地図',icon:'🗺️'},{id:'police',label:'交番',icon:'👮'},{id:'phone',label:'公衆電話',icon:'📞'},{id:'music',label:'音楽',icon:'♪'},{id:'light',label:'ひらめき',icon:'💡'}];
 const NEEDS=[{id:'hair',icon:'💇',label:'髪型に迷い中'},{id:'lost',icon:'❓',label:'道に迷い中'}];
 const STATIONS=[{id:'salon',icon:'💈',label:'サロン'},{id:'koban',icon:'👮',label:'交番'},{id:'phone',icon:'📞',label:'公衆電話'},{id:'home',icon:'🏠',label:'おうち'}];
 const RULES={
@@ -135,17 +132,16 @@ const RULES={
   lost:{ police:{ok:true,escort:true,goTo:'home',msg:'一緒に行きましょう'}, map:{ok:true,goTo:null,msg:'地図でわかった！'}, phone:{ok:false,stillLost:true,msg:'電話では解決せず…'} }
 };
 
-/*** ===== 状態 ===== ***/
+/*** ===== State ===== ***/
 const cvs=document.getElementById('game'), ctx=cvs.getContext('2d');
 if(typeof ctx.roundRect!=='function'){ ctx.roundRect = CanvasRenderingContext2D.prototype.roundRect.bind(ctx); }
 
-let buildings=[], parks=[], props=[], stationPoints=[], stations=[], inspirations=[];
+let buildings=[], parks=[], props=[], stationPointsData=[], stations=[], inspirations=[];
 let residents=[], npcs=[], animals=[], pulses=[], floaters=[];
 let held=null;
-
 const cam={x:0,y:0,z:0.6}; const zMin=0.45, zMax=2.2;
 
-/*** ===== レスポンシブ & 変換 ===== ***/
+/*** ===== Responsive & Transforms ===== ***/
 function desired(){ const maxW=960,maxH=600,ratio=maxW/maxH;
   let w=Math.min(window.innerWidth-24,maxW),h=Math.min(window.innerHeight-180,maxH);
   w=Math.max(320,w); h=Math.max(260,h); if(w/h>ratio) w=h*ratio; else h=w/ratio; return {w:Math.round(w),h:Math.round(h)}; }
@@ -155,59 +151,43 @@ addEventListener('resize',resize);
 function setWorld(){ ctx.setTransform(DPR*cam.z,0,0,DPR*cam.z, -cam.x*DPR*cam.z, -cam.y*DPR*cam.z); }
 function setScreen(){ ctx.setTransform(DPR,0,0,DPR,0,0); }
 function screenToWorld(px,py){ return {x: cam.x + px/cam.z, y: cam.y + py/cam.z}; }
+function sanitizeCam(){
+  if(!isFinite(cam.x)||!isFinite(cam.y)||!isFinite(cam.z)||cam.z<=0){ cam.x=0; cam.y=0; cam.z=0.6; }
+}
 
-/*** ===== シティ生成（オリジナル描写） ===== ***/
-function drawCrosswalk(x,y,w,h,step=10){
-  ctx.fillStyle=PALETTE.zebra;
-  for(let i=0;i<w;i+=step*2){ ctx.fillRect(x+i,y,step,h); }
-}
-function drawTree(x,y){
-  ctx.fillStyle='rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(x,y+12,14,6,0,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle=PALETTE.tree; ctx.beginPath(); ctx.arc(x,y,16,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle='#5b8a3a'; ctx.beginPath(); ctx.arc(x-8,y+2,10,0,Math.PI*2); ctx.arc(x+9,y+1,8,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle='#7b4a2b'; ctx.fillRect(x-3,y,6,16);
-}
-function drawBench(x,y){
-  ctx.fillStyle=PALETTE.bench; ctx.fillRect(x-18,y,36,6); ctx.fillRect(x-18,y-8,36,6);
-  ctx.fillStyle='#6d4726'; ctx.fillRect(x-16,y+6,4,10); ctx.fillRect(x+12,y+6,4,10);
-}
-function drawVending(x,y){
-  ctx.fillStyle='#4fa3ff'; ctx.roundRect(x-10,y-18,20,36,4); ctx.fill();
-  ctx.fillStyle='#eaf5ff'; ctx.fillRect(x-8,y-16,16,10); ctx.fillRect(x-8,y-4,16,12);
-  ctx.fillStyle='#c8ddff'; ctx.fillRect(x-6,y-2,12,2); ctx.fillRect(x-6,y+2,12,2);
-}
+/*** ===== City (オリジナル描画) ===== ***/
+function drawCrosswalk(x,y,w,h,step=10){ ctx.fillStyle=PALETTE.zebra; for(let i=0;i<w;i+=step*2){ ctx.fillRect(x+i,y,step,h); } }
+function drawTree(x,y){ ctx.fillStyle='rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(x,y+12,14,6,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle:'#2e7d32'; ctx.beginPath(); ctx.arc(x,y,16,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#5b8a3a'; ctx.beginPath(); ctx.arc(x-8,y+2,10,0,Math.PI*2); ctx.arc(x+9,y+1,8,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#7b4a2b'; ctx.fillRect(x-3,y,6,16); }
+function drawBench(x,y){ ctx.fillStyle:'#a06c3f'; ctx.fillRect(x-18,y,36,6); ctx.fillRect(x-18,y-8,36,6); ctx.fillStyle='#6d4726'; ctx.fillRect(x-16,y+6,4,10); ctx.fillRect(x+12,y+6,4,10); }
+function drawVending(x,y){ ctx.fillStyle='#4fa3ff'; ctx.roundRect(x-10,y-18,20,36,4); ctx.fill(); ctx.fillStyle='#eaf5ff'; ctx.fillRect(x-8,y-16,16,10); ctx.fillRect(x-8,y-4,16,12); ctx.fillStyle='#c8ddff'; ctx.fillRect(x-6,y-2,12,2); ctx.fillRect(x-6,y+2,12,2); }
+
 function genCity(){
-  buildings.length=0; parks.length=0; props.length=0; stationPoints.length=0;
+  buildings.length=0; parks.length=0; props.length=0; stationPointsData.length=0;
+  const G=CONFIG.roadGap, W=CONFIG.roadW, SW=CONFIG.sidewalk;
 
-  // 道路の交差点に横断歩道用ポイント
-  const roadGap=CONFIG.roadGap, roadW=CONFIG.roadW, sw=CONFIG.sidewalk;
+  for(let x=CONFIG.world.w*0.08; x<CONFIG.world.w*0.92; x+=G){
+    for(let y=CONFIG.world.h*0.1; y<CONFIG.world.h*0.9; y+=G){
+      const bx=x+W, by=y+W, bw=G-W*2, bh=G-W*2;
 
-  // ブロック生成（建物＆公園）
-  for(let x=CONFIG.world.w*0.08; x<CONFIG.world.w*0.92; x+=roadGap){
-    for(let y=CONFIG.world.h*0.1; y<CONFIG.world.h*0.9; y+=roadGap){
-      const bx=x+roadW, by=y+roadW, bw=roadGap-roadW*2, bh=roadGap-roadW*2;
-
-      if(Math.random()<0.12){ // 公園
+      if(Math.random()<0.12){
         parks.push({x:bx+8,y:by+8,w:bw-16,h:bh-16});
-        // 小物
         for(let i=0;i<3;i++) props.push({kind:'tree',x:rand(bx+20,bx+bw-20),y:rand(by+20,by+bh-20)});
         props.push({kind:'bench',x:bx+bw*0.5,y:by+bh*0.7});
         continue;
       }
 
-      // 建物（店/住宅）
       const n=5+Math.floor(Math.random()*4);
       for(let i=0;i<n;i++){
         const w=52+Math.random()*70, h=34+Math.random()*60;
-        const cx=bx+sw+Math.random()*(bw-w-sw*2), cy=by+sw+Math.random()*(bh-h-sw*2);
+        const cx=bx+SW+Math.random()*(bw-w-SW*2), cy=by+SW+Math.random()*(bh-h-SW*2);
         const types=['cafe','book','home','apt','home','home','salon','koban','phone'];
         const t=pick(types);
         buildings.push({x:cx,y:cy,w,h,type:t,c:pick(PALETTE.buildBase)});
-        // 駅（目的地）に相当する店舗を控える
         if(t==='salon'||t==='koban'||t==='phone'||t==='home'){
-          stationPoints.push({x:cx+w/2,y:cy+h/2,type: t==='koban'?'koban':(t==='phone'?'phone':(t==='salon'?'salon':'home'))});
+          stationPointsData.push({x:cx+w/2,y:cy+h/2,type: t});
         }
-        // 小物の配置
         if(Math.random()<0.3) props.push({kind:'vending',x:cx+w/2,y:cy+h/2+Math.min(h/2+18,30)});
         if(Math.random()<0.5) props.push({kind:'tree',x:cx+w+10,y:cy+h/2});
       }
@@ -215,52 +195,50 @@ function genCity(){
   }
 }
 
-/*** ===== エンティティ（スプライト風ベクター） ===== ***/
+/*** ===== Entities ===== ***/
 class Pulse{constructor(x,y,c){this.x=x;this.y=y;this.r=0;this.life=1;this.c=c||'#3ee0ff'} update(dt){this.r+=260*dt;this.life-=.8*dt}
   draw(){ctx.beginPath();ctx.arc(this.x,this.y,this.r,0,Math.PI*2);ctx.strokeStyle=`${this.c}AA`;ctx.lineWidth=2;ctx.stroke();}}
 class Floater{constructor(x,y,txt,col){this.x=x;this.y=y;this.t=0;this.txt=txt;this.col=col||'#fff'} update(dt){this.t+=dt;this.y-=18*dt}
   draw(){const a=Math.max(0,1-this.t/1.2); if(a<=0)return; ctx.save(); ctx.globalAlpha=a; ctx.font='bold 14px system-ui'; ctx.textAlign='center'; ctx.textBaseline='bottom'; ctx.fillStyle=this.col; ctx.fillText(this.txt,this.x,this.y); ctx.restore();}}
-
 class Station{constructor(x,y,type){this.x=x;this.y=y;this.type=type}
-  draw(){ctx.save();
-    // 足元プレート
-    ctx.fillStyle='rgba(255,255,255,.10)'; ctx.roundRect(this.x-24,this.y-16,48,32,8); ctx.fill();
-    const spec=STATIONS.find(s=>s.id===this.type);
-    ctx.font='20px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle='#fff'; ctx.fillText(spec?spec.icon:'?',this.x,this.y);
-    ctx.restore();}}
-
+  draw(){ctx.save(); ctx.fillStyle='rgba(255,255,255,.10)'; ctx.roundRect(this.x-24,this.y-16,48,32,8); ctx.fill();
+    const spec=STATIONS.find(s=>s.id===this.type); ctx.font='20px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle='#fff'; ctx.fillText(spec?spec.icon:'?',this.x,this.y); ctx.restore();}}
 class Inspiration{constructor(x,y,type){this.x=x;this.y=y;this.type=type}
-  draw(){const spec=ITEMS.find(i=>i.id===this.type); ctx.save(); ctx.font='22px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle='#fff'; ctx.fillText(spec?spec.icon:'?',this.x,this.y); ctx.restore(); }}
+  draw(){const spec=ITEMS.find(i=>i.id===this.type); ctx.save(); ctx.font='22px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle='#fff'; ctx.fillText(spec?spec.icon:'?',this.x,this.y); ctx.restore();}}
 
-// 全身キャラ（指示対象）
+function drawBuilding(b){
+  ctx.fillStyle='#1b1f3c'; ctx.fillRect(b.x-4, b.y-4, b.w+8, b.h+8); // 歩道
+  ctx.fillStyle=b.c; ctx.strokeStyle='rgba(0,0,0,.25)'; ctx.lineWidth=3; ctx.fillRect(b.x,b.y,b.w,b.h); ctx.strokeRect(b.x,b.y,b.w,b.h);
+  ctx.fillStyle='#ffffff14'; ctx.fillRect(b.x, b.y, b.w, 6); // 屋根ライン
+  ctx.fillStyle=PALETTE.window; const cols=Math.max(2,Math.floor(b.w/24)), rows=Math.max(1,Math.floor(b.h/28));
+  for(let i=0;i<cols;i++){ for(let j=0;j<rows;j++){ const wx=b.x+8+i*(b.w-16)/(cols-1), wy=b.y+10+j*(b.h-18)/(rows-1); ctx.fillRect(wx-5,wy-6,10,12); } }
+  if(['cafe','book','salon','koban','phone'].includes(b.type)){
+    const label = b.type==='cafe'?'☕': b.type==='book'?'📚': b.type==='salon'?'💈': b.type==='koban'?'👮':'📞';
+    ctx.fillStyle=PALETTE.awning; ctx.roundRect(b.x+6,b.y+b.h-18,40,14,6); ctx.fill();
+    ctx.fillStyle='#fff'; ctx.font='12px system-ui'; ctx.textAlign='left'; ctx.textBaseline='middle'; ctx.fillText(label, b.x+12, b.y+b.h-11);
+  }
+}
+
+// キャラ描画（共通）
 function drawPerson(x,y,cl,face,hair,step,hasBag=false){
-  // 影
   ctx.fillStyle='rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(x,y+12,14,6,0,0,Math.PI*2); ctx.fill();
-  // 足
-  ctx.strokeStyle='#1d203c'; ctx.lineWidth=3;
-  ctx.beginPath(); ctx.moveTo(x-6,y+8); ctx.lineTo(x-6+step*2,y+16); ctx.stroke();
+  ctx.strokeStyle='#1d203c'; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(x-6,y+8); ctx.lineTo(x-6+step*2,y+16); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(x+6,y+8); ctx.lineTo(x+6-step*2,y+16); ctx.stroke();
-  // 体
   ctx.fillStyle=cl; ctx.beginPath(); ctx.roundRect(x-12,y-6,24,26,8); ctx.fill();
-  // バッグ
   if(hasBag){ ctx.fillStyle='#333'; ctx.beginPath(); ctx.roundRect(x+6,y-2,8,10,3); ctx.fill(); }
-  // 腕
-  ctx.strokeStyle='#2d3058'; ctx.lineWidth=3;
-  ctx.beginPath(); ctx.moveTo(x-12,y); ctx.lineTo(x-20,y+6); ctx.stroke();
+  ctx.strokeStyle='#2d3058'; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(x-12,y); ctx.lineTo(x-20,y+6); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(x+12,y); ctx.lineTo(x+20,y+6); ctx.stroke();
-  // 顔
   ctx.fillStyle='#ffe'; ctx.beginPath(); ctx.arc(x,y-10,10,0,Math.PI*2); ctx.fill();
-  // 髪
   ctx.fillStyle=hair.color;
   if(hair.style==='short'){ ctx.beginPath(); ctx.arc(x,y-14,11,Math.PI*1.1,Math.PI*1.9); ctx.lineTo(x+10,y-8); ctx.closePath(); ctx.fill(); }
   if(hair.style==='long'){ ctx.beginPath(); ctx.arc(x,y-15,12,Math.PI*1.1,Math.PI*1.9); ctx.lineTo(x+10,y+2); ctx.arc(x,y+4,12,0,Math.PI,true); ctx.closePath(); ctx.fill(); }
   if(hair.style==='ponytail'){ ctx.beginPath(); ctx.arc(x,y-14,10,Math.PI*1.1,Math.PI*1.9); ctx.fill(); ctx.beginPath(); ctx.ellipse(x+8,y-7,4,8,0,0,Math.PI*2); ctx.fill(); }
-  // 表情
   ctx.fillStyle='#333';
   if(face==='happy'){ ctx.beginPath(); ctx.arc(x-4,y-11,1.6,0,Math.PI*2); ctx.arc(x+4,y-11,1.6,0,Math.PI*2); ctx.fill(); ctx.strokeStyle='#333'; ctx.lineWidth=1.6; ctx.beginPath(); ctx.arc(x,y-6,5,0,Math.PI,false); ctx.stroke(); }
   else if(face==='lost'){ ctx.beginPath(); ctx.arc(x-4,y-11,1.6,0,Math.PI*2); ctx.arc(x+4,y-11,1.6,0,Math.PI*2); ctx.fill(); ctx.fillRect(x-4,y-6,8,2); }
   else { ctx.beginPath(); ctx.arc(x-4,y-11,1.4,0,Math.PI*2); ctx.arc(x+4,y-11,1.4,0,Math.PI*2); ctx.fill(); ctx.fillRect(x-4,y-6,8,2); }
 }
+
 class Resident{
   constructor(x,y,ci,need,look){ this.x=x;this.y=y;this.vx=0;this.vy=0;this.ci=ci;this.need=need;
     this.state='idle'; this.goal=null; this.face='meh'; this.hair=null; this.escort=false;
@@ -304,83 +282,40 @@ class Resident{
     drawPerson(this.x,this.y,base,this.face,hair,step,false); }
 }
 
-// NPC（非操作の通行人）
 class NPC{
   constructor(x,y,cl,look){ this.x=x; this.y=y; this.vx=rand(-.4,.4); this.vy=rand(-.4,.4); this.cl=cl; this.look=look; this.phase=Math.random()*Math.PI*2; }
   update(dt){ this.phase+=dt*6; if(Math.random()<0.02){ this.vx=rand(-.5,.5); this.vy=rand(-.5,.5); }
-    this.x+=this.vx; this.y+=this.vy;
-    const pad=CONFIG.world.padding; this.x=clamp(this.x,pad,CONFIG.world.w-pad); this.y=clamp(this.y,pad,CONFIG.world.h-pad); }
+    this.x+=this.vx; this.y+=this.vy; const pad=CONFIG.world.padding; this.x=clamp(this.x,pad,CONFIG.world.w-pad); this.y=clamp(this.y,pad,CONFIG.world.h-pad); }
   draw(){ const step=Math.sin(this.phase); drawPerson(this.x,this.y,this.cl,'meh',this.look.hair,step,Math.random()<.2); }
 }
 
-// 動物（猫/犬/ハト）
 class Animal{
   constructor(x,y,kind){ this.x=x; this.y=y; this.kind=kind; this.vx=rand(-.3,.3); this.vy=rand(-.3,.3); this.t=0; }
   update(dt){ this.t+=dt; if(Math.random()<0.02){ this.vx=rand(-.3,.3); this.vy=rand(-.3,.3); }
     this.x+=this.vx; this.y+=this.vy; const pad=CONFIG.world.padding; this.x=clamp(this.x,pad,CONFIG.world.w-pad); this.y=clamp(this.y,pad,CONFIG.world.h-pad); }
-  draw(){
-    // 影
-    ctx.fillStyle='rgba(0,0,0,.22)'; ctx.beginPath(); ctx.ellipse(this.x,this.y+6,10,4,0,0,Math.PI*2); ctx.fill();
-    // 本体
+  draw(){ ctx.fillStyle='rgba(0,0,0,.22)'; ctx.beginPath(); ctx.ellipse(this.x,this.y+6,10,4,0,0,Math.PI*2); ctx.fill();
     ctx.save(); ctx.fillStyle= this.kind==='cat' ? '#d9d0c7' : (this.kind==='dog' ? '#caa383' : '#cfd7e1');
     if(this.kind==='pigeon'){ ctx.beginPath(); ctx.arc(this.x,this.y,6,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#9aa8b5'; ctx.fillRect(this.x-4,this.y+4,8,5); }
     else { ctx.beginPath(); ctx.ellipse(this.x,this.y,8,6,0,0,Math.PI*2); ctx.fill(); ctx.fillRect(this.x-1,this.y-8,2,6); }
-    ctx.restore();
-  }
+    ctx.restore(); }
 }
 
 /*** ===== レイアウト/初期化 ===== ***/
-function drawBuilding(b){
-  // 歩道
-  ctx.fillStyle='#1b1f3c'; ctx.fillRect(b.x-4, b.y-4, b.w+8, b.h+8);
-  // 建物
-  ctx.fillStyle=b.c; ctx.strokeStyle='rgba(0,0,0,.25)'; ctx.lineWidth=3;
-  ctx.fillRect(b.x,b.y,b.w,b.h); ctx.strokeRect(b.x,b.y,b.w,b.h);
-  // 屋根ライン
-  ctx.fillStyle='#ffffff14'; ctx.fillRect(b.x, b.y, b.w, 6);
-  // 窓
-  ctx.fillStyle=PALETTE.window;
-  const cols=Math.max(2,Math.floor(b.w/24)), rows=Math.max(1,Math.floor(b.h/28));
-  for(let i=0;i<cols;i++){ for(let j=0;j<rows;j++){
-    const wx=b.x+8+i*(b.w-16)/(cols-1), wy=b.y+10+j*(b.h-18)/(rows-1);
-    ctx.fillRect(wx-5,wy-6,10,12);
-  }}
-  // 店舗看板
-  if(b.type==='cafe'||b.type==='book'||b.type==='salon'||b.type==='koban'||b.type==='phone'){
-    const label = b.type==='cafe'?'☕': b.type==='book'?'📚': b.type==='salon'?'💈': b.type==='koban'?'👮':'📞';
-    ctx.fillStyle=PALETTE.awning; ctx.roundRect(b.x+6,b.y+b.h-18,40,14,6); ctx.fill();
-    ctx.fillStyle='#fff'; ctx.font='12px system-ui'; ctx.textAlign='left'; ctx.textBaseline='middle';
-    ctx.fillText(label, b.x+12, b.y+b.h-11);
-  }
-}
-
 function layoutWorld(){
   genCity();
-  // ステーション
-  stations = stationPoints.map(s=>new Station(s.x,s.y,s.type));
-
-  // アイテムを街中にバラ撒き（建物の脇などに）
+  stations = stationPointsData.map(s=>new Station(s.x,s.y,s.type));
   inspirations.length=0; residents.length=0; npcs.length=0; animals.length=0; pulses.length=0; floaters.length=0; held=null;
-  for(let i=0;i<32;i++){
-    const b = pick(buildings);
-    const px = clamp(b.x + b.w/2 + rand(-60,60), CONFIG.world.padding, CONFIG.world.w-CONFIG.world.padding);
-    const py = clamp(b.y + b.h/2 + rand(-60,60), CONFIG.world.padding, CONFIG.world.h-CONFIG.world.padding);
-    const it=pick(ITEMS); inspirations.push(new Inspiration(px,py,it.id));
-  }
-
-  // 指示対象の住人
+  for(let i=0;i<32;i++){ const b=pick(buildings); const px=clamp(b.x+b.w/2+rand(-60,60),CONFIG.world.padding,CONFIG.world.w-CONFIG.world.padding);
+    const py=clamp(b.y+b.h/2+rand(-60,60),CONFIG.world.padding,CONFIG.world.h-CONFIG.world.padding); const it=pick(ITEMS); inspirations.push(new Inspiration(px,py,it.id)); }
   const hairStyles=['short','long','ponytail'], hairColors=['#222','#6b3a1e','#1e3b6b','#6b1e4f','#2e6b2e'];
-  for(let i=0;i<10;i++){
-    const need=NEEDS[i%NEEDS.length].id;
-    const look={hair:{style:pick(hairStyles), color:pick(hairColors)}};
-    const bx=pick(buildings); residents.push(new Resident(bx.x+bx.w/2, bx.y+bx.h/2, i, need, look));
-  }
+  for(let i=0;i<10;i++){ const need=NEEDS[i%NEEDS.length].id; const look={hair:{style:pick(hairStyles), color:pick(hairColors)}}; const bx=pick(buildings);
+    residents.push(new Resident(bx.x+bx.w/2,bx.y+bx.h/2,i,need,look)); }
+  for(let i=0;i<28;i++){ const look={hair:{style:pick(hairStyles), color:pick(hairColors)}}; const bx=pick(buildings);
+    npcs.push(new NPC(bx.x+bx.w/2,bx.y+bx.h/2,pick(PALETTE.npcClothes),look)); }
+  for(let i=0;i<16;i++){ const bx=pick(buildings); animals.push(new Animal(bx.x+bx.w/2,bx.y+bx.h/2,pick(['cat','dog','pigeon']))); }
+  const vs=viewSizeWorld(); cam.x=(CONFIG.world.w-vs.w)/2; cam.y=(CONFIG.world.h-vs.h)/2; cam.z=0.6;
+}
 
-  // NPC群衆
-  for(let i=0;i<28;i++){
-    const look={hair:{style:pick(hairStyles), color:pick(hairColors)}};
-    const bx=pick(buildings); npcs.push(new NPC(bx.x+bx.w/2, bx.y+bx.h/2, pick(PALETTE.npcClothes), look));
-  }
-
-  // 動物
-  const kinds=['cat','dog','pigeon'];
+/*** ===== 入力 ===== ***/
+const heldIconEl=document.getElementById('heldIcon');
+function updateHeldUI(){ const spec
