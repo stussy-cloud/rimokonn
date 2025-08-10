@@ -22,6 +22,19 @@
   .btn{pointer-events:all;cursor:pointer;display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(255,255,255,.18);
     background:linear-gradient(180deg,rgba(255,255,255,.12),rgba(255,255,255,.06));padding:6px 10px;border-radius:12px;color:#fff;text-decoration:none;font-weight:700;font-size:12px}
   .zoomBtns{position:absolute;right:12px;bottom:12px;display:grid;gap:8px}
+  /* === 追加：スマホ最適化＆レイヤ順 === */
+.hud{ z-index:4; }                 /* 文字は前面だが操作は邪魔しない */
+details.legend{ z-index:5; pointer-events:auto; } /* タップ可能に */
+canvas{ z-index:1; }
+
+/* ヘルプを小さく＆幅を抑える */
+details.legend{ max-width: 80vw; }
+@media (max-width: 480px){
+  .hud{ font-size:12px; }
+  details.legend{ right:8px; top:8px; font-size:11px; max-width: 72vw; }
+  .panel{ gap:8px }
+  .btn{ padding:6px 10px; font-size:11px }
+}
 </style>
 </head>
 <body>
