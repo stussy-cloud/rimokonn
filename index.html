@@ -78,13 +78,15 @@ details.legend{ max-width: 80vw; }
 </script>
 
 <!-- スクリプト群（順番厳守） -->
-<script src="./config.js?v=perf15"></script>
-<script src="./city.js?v=perf15"></script>
-<script src="./entities.js?v=perf15"></script>
-<!-- <script src="./input.js?v=perf15"></script>  ← ここはいったん外す or コメントアウト -->
-<script src="./main.js?v=perf15"></script>
+<script src="./config.js?v=perf16"></script>
+<script src="./city.js?v=perf16"></script>
+<script src="./entities.js?v=perf16"></script>
+<script src="./main.js?v=perf16"></script>
 
-<!-- ビルド確認用（今読んだ版が必ず表示されます） -->
-<script>document.getElementById('status').insertAdjacentHTML('beforeend',' / build: <b>perf15</b>');</script>
+<script>
+  const v = 'perf16';
+  document.getElementById('status').insertAdjacentHTML('beforeend', ' / build: <b>' + v + '</b>');
+</script>
+
 </body>
 </html>
