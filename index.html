@@ -53,6 +53,23 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./service-worker.js').catch(console.warn);
   });
 }
+  
+<script>
+// …Service Worker登録の直後あたりに追加
+if (!CanvasRenderingContext2D.prototype.roundRect) {
+  CanvasRenderingContext2D.prototype.roundRect = function (x,y,w,h,r){
+    const m = Math.min(w,h); if(r>m/2) r=m/2;
+    this.beginPath();
+    this.moveTo(x+r, y);
+    this.arcTo(x+w, y,   x+w, y+h, r);
+    this.arcTo(x+w, y+h, x,   y+h, r);
+    this.arcTo(x,   y+h, x,   y,   r);
+    this.arcTo(x,   y,   x+w, y,   r);
+    this.closePath();
+    return this;
+  };
+}
+</script>
 
 // ===== Utility =====
 const DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
