@@ -1,5 +1,5 @@
 // Simple cache-first service worker
-const CACHE = 'hint-town-v1';
+const CACHE = 'hint-town-v2'; // v1→v2 など番号を上げる
 const ASSETS = [
   './',
   './index.html',
