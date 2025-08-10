@@ -1,6 +1,10 @@
-// ====== 基本設定・ユーティリティ ======
+// ====== 基本設定・ユーティリティ（モバイル最適化） ======
+const PERF = {
+  low: matchMedia('(max-width:700px)').matches || (navigator.hardwareConcurrency||4) <= 4
+};
+const DPR = PERF.low ? 1 : Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+
 const DEBUG_HUD = true;
-const DPR=Math.max(1,Math.min(2,window.devicePixelRatio||1));
 const rand=(a,b)=>a+Math.random()*(b-a);
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const pick=a=>a[(Math.random()*a.length)|0];
@@ -22,7 +26,7 @@ const RULES={
   lost:{ police:{ok:true,escort:true,goTo:'home',msg:'一緒に行きましょう'}, map:{ok:true,goTo:null,msg:'地図でわかった！'}, phone:{ok:false,stillLost:true,msg:'電話では解決せず…'} }
 };
 
-// ====== グローバル状態（他ファイルから参照） ======
+// ====== グローバル状態 ======
 var cvs, ctx;
 let buildings=[], parks=[], props=[], stationPoints=[], stations=[], inspirations=[];
 let residents=[], npcs=[], animals=[], pulses=[], floaters=[];
@@ -31,8 +35,12 @@ const cam={x:0,y:0,z:0.6}; const zMin=0.45, zMax=2.2;
 
 // ====== 変換・サイズ ======
 function desired(){ const maxW=960,maxH=600,ratio=maxW/maxH;
-  let w=Math.min(window.innerWidth-24,maxW),h=Math.min(window.innerHeight-180,maxH);
-  w=Math.max(320,w); h=Math.max(260,h); if(w/h>ratio) w=h*ratio; else h=w/ratio; return {w:Math.round(w),h:Math.round(h)}; }
+  let vw=window.innerWidth-24, vh=window.innerHeight-(PERF.low?120:180);
+  let w=Math.min(vw,maxW), h=Math.min(vh,maxH);
+  w=Math.max(320,w); h=Math.max(260,h);
+  if(w/h>ratio) w=h*ratio; else h=w/ratio;
+  return {w:Math.round(w),h:Math.round(h)};
+}
 function viewSizeWorld(){ return { w:cvs.width/(DPR*cam.z), h:cvs.height/(DPR*cam.z) }; }
 function resize(){ const s=desired(); cvs.style.width=s.w+'px'; cvs.style.height=s.h+'px'; cvs.width=Math.floor(s.w*DPR); cvs.height=Math.floor(s.h*DPR); }
 addEventListener('resize',resize);
