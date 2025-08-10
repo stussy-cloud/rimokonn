@@ -1,4 +1,4 @@
-// ====== 街の生成 ======
+// ====== 街の生成（同じ） ======
 function genCity(){
   buildings.length=0; parks.length=0; props.length=0; stationPoints.length=0;
   const G=CONFIG.roadGap, W=CONFIG.roadW, SW=CONFIG.sidewalk;
@@ -35,24 +35,27 @@ function genCity(){
   }
 }
 
-// ====== 静的レイヤをキャッシュ ======
-let CITY_LAYER=null;
+// ====== 静的レイヤをキャッシュ（縮小生成あり） ======
+let CITY_LAYER=null, CITY_SCALE = (typeof PERF!=='undefined' && PERF.low) ? 0.5 : 1;
+
 function buildCityLayer(){
   const can=document.createElement('canvas');
-  can.width=CONFIG.world.w; can.height=CONFIG.world.h;
+  can.width=Math.max(1, Math.floor(CONFIG.world.w * CITY_SCALE));
+  can.height=Math.max(1, Math.floor(CONFIG.world.h * CITY_SCALE));
   const g=can.getContext('2d');
+  g.scale(CITY_SCALE, CITY_SCALE);
 
   // 地面
   g.fillStyle='#0c1026'; g.fillRect(0,0,CONFIG.world.w,CONFIG.world.h);
 
-  // 道路（グリッド）
+  // 道路
   g.fillStyle=PALETTE.road;
   for(let x=0; x<CONFIG.world.w; x+=CONFIG.roadGap){ g.fillRect(x,0,CONFIG.roadW,CONFIG.world.h); }
   for(let y=0; y<CONFIG.world.h; y+=CONFIG.roadGap){ g.fillRect(0,y,CONFIG.world.w,CONFIG.roadW); }
 
   // 横断歩道
-  const step=10;
   g.fillStyle=PALETTE.zebra;
+  const step=10;
   for(let x=0; x<CONFIG.world.w; x+=CONFIG.roadGap){
     for(let y=0; y<CONFIG.world.h; y+=CONFIG.roadGap){
       for(let i=0;i<60;i+=step*2){ g.fillRect(x-30+i, y+CONFIG.roadW/2-6, step, 12); }
@@ -63,8 +66,8 @@ function buildCityLayer(){
   // 公園
   g.fillStyle=PALETTE.grass; for(const p of parks){ g.fillRect(p.x,p.y,p.w,p.h); }
 
-  // 建物（軽量化：ウィンドウ密度を落とす）
-  const density = PERF.low ? 0.6 : 1.0;
+  // 建物（ウィンドウ密度は端末に応じて）
+  const density = (typeof PERF!=='undefined' && PERF.low) ? 0.6 : 1.0;
   for(const b of buildings.sort((a,b)=>a.y-b.y)){
     g.fillStyle='#1b1f3c'; g.fillRect(b.x-4,b.y-4,b.w+8,b.h+8);
     g.fillStyle=b.c; g.strokeStyle='rgba(0,0,0,.25)'; g.lineWidth=3; g.fillRect(b.x,b.y,b.w,b.h); g.strokeRect(b.x,b.y,b.w,b.h);
@@ -81,9 +84,7 @@ function buildCityLayer(){
 
     if(['cafe','book','salon','koban','phone'].includes(b.type)){
       const label=b.type==='cafe'?'☕': b.type==='book'?'📚': b.type==='salon'?'💈': b.type==='koban'?'👮':'📞';
-      // 簡易オーニング
-      g.fillStyle=PALETTE.awning; g.beginPath();
-      g.moveTo(b.x+6,b.y+b.h-18); g.lineTo(b.x+46,b.y+b.h-18); g.lineTo(b.x+46,b.y+b.h-4); g.lineTo(b.x+6,b.y+b.h-4); g.closePath(); g.fill();
+      g.fillStyle=PALETTE.awning; g.fillRect(b.x+6,b.y+b.h-18,40,14);
       g.fillStyle='#fff'; g.font='12px system-ui'; g.textAlign='left'; g.textBaseline='middle'; g.fillText(label, b.x+12, b.y+b.h-11);
     }
   }
@@ -108,8 +109,23 @@ function buildCityLayer(){
   CITY_LAYER = can;
 }
 
-// 毎フレームはキャッシュを貼るだけ
-function drawCity(){
+// ====== ビューポートだけブリット ======
+function drawCityFast(){
   if(!CITY_LAYER) buildCityLayer();
-  ctx.drawImage(CITY_LAYER, 0, 0);
+  // 画面サイズ（スクリーン座標）
+  const dw = cvs.width / DPR, dh = cvs.height / DPR;
+  // ワールドの可視範囲
+  const vw = viewSizeWorld();
+  const sx = cam.x * CITY_SCALE;
+  const sy = cam.y * CITY_SCALE;
+  const sw = vw.w * CITY_SCALE;
+  const sh = vw.h * CITY_SCALE;
+
+  // スクリーン描画
+  setScreen();
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(CITY_LAYER, sx, sy, sw, sh, 0, 0, dw, dh);
+
+  // この後はワールド描画に戻す
+  setWorld();
 }
