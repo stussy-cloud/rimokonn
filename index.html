@@ -51,7 +51,7 @@
   </div>
 </div>
 
-<!-- 0) SWワンクリック無効化: https://.../?killsw=1 -->
+<!-- SWキルスイッチ（?killsw=1でSW解除→自動再読込） -->
 <script>
 (() => {
   const qs = new URLSearchParams(location.search);
@@ -64,27 +64,17 @@
 })();
 </script>
 
-<script>
-/*** ===== デバッグHUD ===== ***/
-const DEBUG_HUD = true;
-(function(){
-  if(!DEBUG_HUD) return;
-  const box=document.createElement('div');
-  box.style.cssText='position:fixed;left:8px;bottom:8px;background:rgba(0,0,0,.6);color:#fff;padding:6px 8px;border-radius:8px;font:12px/1.4 system-ui;z-index:99999';
-  box.id='debugHud'; box.textContent='boot';
-  window.addEventListener('DOMContentLoaded',()=>document.body.appendChild(box));
-  const log=msg=>box.textContent=msg;
-  window.addEventListener('error',e=>log('Error: '+e.message));
-  window.addEventListener('unhandledrejection',e=>log('Promise: '+(e.reason&&e.reason.message||e.reason)));
-  setInterval(()=>log('tick '+Math.floor(performance.now()/1000)),800);
-})();
+<!-- スクリプト群（順番厳守） -->
+<script src="./polyfills.js"></script>
+<script src="./config.js"></script>
+<script src="./city.js"></script>
+<script src="./entities.js"></script>
+<script src="./input.js"></script>
+<script src="./main.js"></script>
+</body>
+</html>
 
-/*** ===== SW登録 ===== ***/
-if('serviceWorker' in navigator){
-  addEventListener('load',()=>navigator.serviceWorker.register('./service-worker.js').catch(console.warn));
-}
-
-/*** ===== Polyfills ===== ***/
+// roundRect / ellipse ポリフィル
 if(!CanvasRenderingContext2D.prototype.roundRect){
   CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){
     const m=Math.min(w,h); if(r>m/2) r=m/2;
@@ -103,13 +93,13 @@ if(!CanvasRenderingContext2D.prototype.ellipse){
   };
 }
 
-/*** ===== Util ===== ***/
+// ====== 基本設定・ユーティリティ ======
+const DEBUG_HUD = true;
 const DPR=Math.max(1,Math.min(2,window.devicePixelRatio||1));
 const rand=(a,b)=>a+Math.random()*(b-a);
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const pick=a=>a[(Math.random()*a.length)|0];
 
-/*** ===== Config & Palette ===== ***/
 const CONFIG={ world:{w:3600,h:2400,padding:100}, speed:1.18, focusedBoost:1.35, r:16, roadGap:240, roadW:36, sidewalk:18 };
 const PALETTE={
   road:'#2a2f52', zebra:'#dfe7ff', grass:'#1d4d2c',
@@ -118,7 +108,6 @@ const PALETTE={
   npcClothes:['#ff7aa2','#ffd166','#7bd389','#7bb6ff','#f49ac2','#95d0fc']
 };
 
-// ヒント/悩み/目的地/ルール
 const ITEMS=[{id:'photo_short',label:'髪型(ショート)',icon:'📸'},{id:'photo_long',label:'髪型(ロング)',icon:'📸'},
   {id:'map',label:'地図',icon:'🗺️'},{id:'police',label:'交番',icon:'👮'},{id:'phone',label:'公衆電話',icon:'📞'},{id:'music',label:'音楽',icon:'♪'},{id:'light',label:'ひらめき',icon:'💡'}];
 const NEEDS=[{id:'hair',icon:'💇',label:'髪型に迷い中'},{id:'lost',icon:'❓',label:'道に迷い中'}];
@@ -128,16 +117,14 @@ const RULES={
   lost:{ police:{ok:true,escort:true,goTo:'home',msg:'一緒に行きましょう'}, map:{ok:true,goTo:null,msg:'地図でわかった！'}, phone:{ok:false,stillLost:true,msg:'電話では解決せず…'} }
 };
 
-/*** ===== State ===== ***/
-const cvs=document.getElementById('game'), ctx=cvs.getContext('2d');
-if(typeof ctx.roundRect!=='function'){ ctx.roundRect = CanvasRenderingContext2D.prototype.roundRect.bind(ctx); }
-
+// ====== グローバル状態（他ファイルから参照） ======
+var cvs, ctx;
 let buildings=[], parks=[], props=[], stationPoints=[], stations=[], inspirations=[];
 let residents=[], npcs=[], animals=[], pulses=[], floaters=[];
 let held=null;
 const cam={x:0,y:0,z:0.6}; const zMin=0.45, zMax=2.2;
 
-/*** ===== Responsive & Transforms ===== ***/
+// ====== 変換・サイズ ======
 function desired(){ const maxW=960,maxH=600,ratio=maxW/maxH;
   let w=Math.min(window.innerWidth-24,maxW),h=Math.min(window.innerHeight-180,maxH);
   w=Math.max(320,w); h=Math.max(260,h); if(w/h>ratio) w=h*ratio; else h=w/ratio; return {w:Math.round(w),h:Math.round(h)}; }
@@ -147,11 +134,9 @@ addEventListener('resize',resize);
 function setWorld(){ ctx.setTransform(DPR*cam.z,0,0,DPR*cam.z, -cam.x*DPR*cam.z, -cam.y*DPR*cam.z); }
 function setScreen(){ ctx.setTransform(DPR,0,0,DPR,0,0); }
 function screenToWorld(px,py){ return {x: cam.x + px/cam.z, y: cam.y + py/cam.z}; }
-function sanitizeCam(){
-  if(!isFinite(cam.x)||!isFinite(cam.y)||!isFinite(cam.z)||cam.z<=0){ cam.x=0; cam.y=0; cam.z=0.6; }
-}
+function sanitizeCam(){ if(!isFinite(cam.x)||!isFinite(cam.y)||!isFinite(cam.z)||cam.z<=0){ cam.x=0; cam.y=0; cam.z=0.6; } }
 
-/*** ===== City（生成＆描画） ===== ***/
+// ====== 街のジオメトリ＆描画 ======
 function drawCrosswalk(x,y,w,h,step=10){ ctx.fillStyle=PALETTE.zebra; for(let i=0;i<w;i+=step*2){ ctx.fillRect(x+i,y,step,h); } }
 function drawTree(x,y){ ctx.fillStyle='rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(x,y+12,14,6,0,0,Math.PI*2); ctx.fill();
   ctx.fillStyle='#2e7d32'; ctx.beginPath(); ctx.arc(x,y,16,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#5b8a3a'; ctx.beginPath(); ctx.arc(x-8,y+2,10,0,Math.PI*2); ctx.arc(x+9,y+1,8,0,Math.PI*2); ctx.fill();
@@ -190,23 +175,11 @@ function genCity(){
     }
   }
 
-  // 念のため：極端に少ない場合の最低保証
-  if(buildings.length===0){
+  if(buildings.length===0){ // 最低保証
     buildings.push({x:400,y:300,w:120,h:80,type:'salon',c:'#6ec1ff'});
     stationPoints.push({x:460,y:340,type:'salon'});
   }
 }
-
-/*** ===== Entities ===== ***/
-class Pulse{constructor(x,y,c){this.x=x;this.y=y;this.r=0;this.life=1;this.c=c||'#3ee0ff'} update(dt){this.r+=260*dt;this.life-=.8*dt}
-  draw(){ctx.beginPath();ctx.arc(this.x,this.y,this.r,0,Math.PI*2);ctx.strokeStyle=`${this.c}AA`;ctx.lineWidth=2;ctx.stroke();}}
-class Floater{constructor(x,y,txt,col){this.x=x;this.y=y;this.t=0;this.txt=txt;this.col=col||'#fff'} update(dt){this.t+=dt;this.y-=18*dt}
-  draw(){const a=Math.max(0,1-this.t/1.2); if(a<=0)return; ctx.save(); ctx.globalAlpha=a; ctx.font='bold 14px system-ui'; ctx.textAlign='center'; ctx.textBaseline='bottom'; ctx.fillStyle=this.col; ctx.fillText(this.txt,this.x,this.y); ctx.restore();}}
-class Station{constructor(x,y,type){this.x=x;this.y=y;this.type=type}
-  draw(){ctx.save(); ctx.fillStyle='rgba(255,255,255,.10)'; ctx.roundRect(this.x-24,this.y-16,48,32,8); ctx.fill();
-    const spec=STATIONS.find(s=>s.id===this.type); ctx.font='20px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle='#fff'; ctx.fillText(spec?spec.icon:'?',this.x,this.y); ctx.restore();}}
-class Inspiration{constructor(x,y,type){this.x=x;this.y=y;this.type=type}
-  draw(){const spec=ITEMS.find(i=>i.id===this.type); ctx.save(); ctx.font='22px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle='#fff'; ctx.fillText(spec?spec.icon:'?',this.x,this.y); ctx.restore();}}
 
 function drawBuilding(b){
   ctx.fillStyle='#1b1f3c'; ctx.fillRect(b.x-4, b.y-4, b.w+8, b.h+8); // 歩道
@@ -221,7 +194,33 @@ function drawBuilding(b){
   }
 }
 
-// キャラ描画（共通）
+function drawCity(){
+  ctx.fillStyle='#0c1026'; ctx.fillRect(0,0,CONFIG.world.w,CONFIG.world.h); // 地面
+  ctx.fillStyle=PALETTE.road; // 道路
+  for(let x=0; x<CONFIG.world.w; x+=CONFIG.roadGap){ ctx.fillRect(x,0,CONFIG.roadW,CONFIG.world.h); }
+  for(let y=0; y<CONFIG.world.h; y+=CONFIG.roadGap){ ctx.fillRect(0,y,CONFIG.world.w,CONFIG.roadW); }
+  for(let x=0; x<CONFIG.world.w; x+=CONFIG.roadGap){ // 横断歩道
+    for(let y=0; y<CONFIG.world.h; y+=CONFIG.roadGap){
+      drawCrosswalk(x-30, y+CONFIG.roadW/2-6, 60, 12);
+      drawCrosswalk(x+CONFIG.roadW/2-6, y-30, 12, 60);
+    }
+  }
+  ctx.fillStyle=PALETTE.grass; for(const p of parks){ ctx.fillRect(p.x,p.y,p.w,p.h); }
+  buildings.sort((a,b)=>a.y-b.y); for(const b of buildings){ drawBuilding(b); }
+  for(const pr of props){ if(pr.kind==='tree') drawTree(pr.x,pr.y); if(pr.kind==='bench') drawBench(pr.x,pr.y); if(pr.kind==='vending') drawVending(pr.x,pr.y); }
+}
+
+// ====== エンティティ ======
+class Pulse{constructor(x,y,c){this.x=x;this.y=y;this.r=0;this.life=1;this.c=c||'#3ee0ff'} update(dt){this.r+=260*dt;this.life-=.8*dt}
+  draw(){ctx.beginPath();ctx.arc(this.x,this.y,this.r,0,Math.PI*2);ctx.strokeStyle=`${this.c}AA`;ctx.lineWidth=2;ctx.stroke();}}
+class Floater{constructor(x,y,txt,col){this.x=x;this.y=y;this.t=0;this.txt=txt;this.col=col||'#fff'} update(dt){this.t+=dt;this.y-=18*dt}
+  draw(){const a=Math.max(0,1-this.t/1.2); if(a<=0)return; ctx.save(); ctx.globalAlpha=a; ctx.font='bold 14px system-ui'; ctx.textAlign='center'; ctx.textBaseline='bottom'; ctx.fillStyle=this.col; ctx.fillText(this.txt,this.x,this.y); ctx.restore();}}
+class Station{constructor(x,y,type){this.x=x;this.y=y;this.type=type}
+  draw(){ctx.save(); ctx.fillStyle='rgba(255,255,255,.10)'; ctx.roundRect(this.x-24,this.y-16,48,32,8); ctx.fill();
+    const spec=STATIONS.find(s=>s.id===this.type); ctx.font='20px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle='#fff'; ctx.fillText(spec?spec.icon:'?',this.x,this.y); ctx.restore();}}
+class Inspiration{constructor(x,y,type){this.x=x;this.y=y;this.type=type}
+  draw(){const spec=ITEMS.find(i=>i.id===this.type); ctx.save(); ctx.font='22px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle='#fff'; ctx.fillText(spec?spec.icon:'?',this.x,this.y); ctx.restore();}}
+
 function drawPerson(x,y,cl,face,hair,step,hasBag=false){
   ctx.fillStyle='rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(x,y+12,14,6,0,0,Math.PI*2); ctx.fill();
   ctx.strokeStyle='#1d203c'; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(x-6,y+8); ctx.lineTo(x-6+step*2,y+16); ctx.stroke();
@@ -302,13 +301,12 @@ class Animal{
     ctx.restore(); }
 }
 
-/*** ===== レイアウト/初期化 ===== ***/
+// ====== レイアウト ======
 function layoutWorld(){
   genCity();
   stations = stationPoints.map(s=>new Station(s.x,s.y,s.type));
   inspirations.length=0; residents.length=0; npcs.length=0; animals.length=0; pulses.length=0; floaters.length=0; held=null;
 
-  // ヒントを配置
   for(let i=0;i<32;i++){
     const b=pick(buildings);
     const px=clamp(b.x+b.w/2+rand(-60,60),CONFIG.world.padding,CONFIG.world.w-CONFIG.world.padding);
@@ -316,16 +314,136 @@ function layoutWorld(){
     const it=pick(ITEMS);
     inspirations.push(new Inspiration(px,py,it.id));
   }
-  // 指示対象
   const hairStyles=['short','long','ponytail'], hairColors=['#222','#6b3a1e','#1e3b6b','#6b1e4f','#2e6b2e'];
   for(let i=0;i<10;i++){
     const need=NEEDS[i%NEEDS.length].id;
     const look={hair:{style:pick(hairStyles), color:pick(hairColors)}};
     const bx=pick(buildings); residents.push(new Resident(bx.x+bx.w/2,bx.y+bx.h/2,i,need,look));
   }
-  // 群衆＆動物
   for(let i=0;i<28;i++){ const look={hair:{style:pick(hairStyles), color:pick(hairColors)}}; const bx=pick(buildings); npcs.push(new NPC(bx.x+bx.w/2,bx.y+bx.h/2,pick(PALETTE.npcClothes),look)); }
   for(let i=0;i<16;i++){ const bx=pick(buildings); animals.push(new Animal(bx.x+bx.w/2,bx.y+bx.h/2,pick(['cat','dog','pigeon']))); }
 
-  // カメラ中央
-  const vs=vie
+  const vs=viewSizeWorld(); cam.x=(CONFIG.world.w-vs.w)/2; cam.y=(CONFIG.world.h-vs.h)/2; cam.z=0.6;
+}
+
+// ====== 入力/UI ======
+const heldIconEl = document.getElementById('heldIcon');
+function updateHeldUI(){ const spec=held?ITEMS.find(i=>i.id===held.type):null; heldIconEl.textContent=held?(spec?spec.icon:'?')+' '+(spec?spec.label:held.type):'なし'; }
+function nearest(list,x,y,rad){ let best=null,b=rad*rad; for(const o of list){const d=(o.x-x)**2+(o.y-y)**2; if(d<=b){b=d;best=o}} return best; }
+function tryPickOrApplyWorld(wx,wy){
+  if(!held){ const i=nearest(inspirations,wx,wy,28/cam.z); if(i){held=i; inspirations=inspirations.filter(o=>o!==i); updateHeldUI(); pulses.push(new Pulse(i.x,i.y,'#10e0ff')); return true;} return false; }
+  const r=nearest(residents,wx,wy,44/cam.z); if(!r) return false; r.apply(held); held=null; updateHeldUI();
+  const it=pick(ITEMS); inspirations.push(new Inspiration(wx+rand(-60,60), wy+rand(-60,60), it.id)); return true;
+}
+
+let fingers=new Map(), startDist=0,startZ=cam.z,startMid=null;
+document.getElementById('game').addEventListener('touchstart',e=>{e.preventDefault();
+  for(const t of e.changedTouches) fingers.set(t.identifier,{x:t.clientX,y:t.clientY});
+  if(fingers.size===1){ const t=e.changedTouches[0], r=e.target.getBoundingClientRect(); const p=screenToWorld(t.clientX-r.left,t.clientY-r.top); tryPickOrApplyWorld(p.x,p.y); }
+  if(fingers.size===2){ const [a,b]=[...fingers.values()]; startDist=Math.hypot(a.x-b.x,a.y-b.y); startZ=cam.z; startMid={x:(a.x+b.x)/2,y:(a.y+b.y)/2}; }
+},{passive:false});
+document.getElementById('game').addEventListener('touchmove',e=>{e.preventDefault();
+  for(const t of e.changedTouches) if(fingers.has(t.identifier)) fingers.set(t.identifier,{x:t.clientX,y:t.clientY});
+  if(fingers.size===2){ const [a,b]=[...fingers.values()]; const curDist=Math.hypot(a.x-b.x,a.y-b.y); const scale=clamp(curDist/startDist,0.3,3);
+    const r=e.target.getBoundingClientRect(); const before=screenToWorld(startMid.x-r.left,startMid.y-r.top);
+    cam.z=clamp(startZ*scale,zMin,zMax); const after=screenToWorld(startMid.x-r.left,startMid.y-r.top);
+    cam.x+=before.x-after.x; cam.y+=before.y-after.y; const vs=viewSizeWorld(); cam.x=clamp(cam.x,0,CONFIG.world.w-vs.w); cam.y=clamp(cam.y,0,CONFIG.world.h-vs.h); }
+},{passive:false});
+document.getElementById('game').addEventListener('touchend',e=>{for(const t of e.changedTouches) fingers.delete(t.identifier);},{passive:true});
+document.getElementById('game').addEventListener('touchcancel',e=>{for(const t of e.changedTouches) fingers.delete(t.identifier);},{passive:true});
+
+let dragging=false,lastMouse={x:0,y:0};
+document.getElementById('game').addEventListener('mousedown',e=>{
+  if(e.button===0){ const r=e.target.getBoundingClientRect(); const p=screenToWorld(e.clientX-r.left,e.clientY-r.top); tryPickOrApplyWorld(p.x,p.y); }
+  if(e.button===1||e.button===2){ dragging=true; lastMouse={x:e.clientX,y:e.clientY}; }
+});
+addEventListener('mousemove',e=>{ if(!dragging)return; const dx=(e.clientX-lastMouse.x)/cam.z, dy=(e.clientY-lastMouse.y)/cam.z;
+  const vs=viewSizeWorld(); cam.x=clamp(cam.x-dx,0,CONFIG.world.w-vs.w); cam.y=clamp(cam.y-dy,0,CONFIG.world.h-vs.h); lastMouse={x:e.clientX,y:e.clientY}; });
+addEventListener('mouseup',()=>dragging=false);
+document.getElementById('game').addEventListener('contextmenu',e=>e.preventDefault());
+document.getElementById('game').addEventListener('wheel',e=>{
+  e.preventDefault(); const r=e.target.getBoundingClientRect(); const mx=e.clientX-r.left, my=e.clientY-r.top;
+  const before=screenToWorld(mx,my); cam.z=clamp(cam.z*(e.deltaY>0?0.9:1.1),zMin,zMax); const after=screenToWorld(mx,my); cam.x+=before.x-after.x; cam.y+=before.y-after.y;
+},{passive:false});
+
+// ====== デバッグHUDとSW登録、メインループ ======
+(function(){
+  if(!DEBUG_HUD) return;
+  const box=document.createElement('div');
+  box.style.cssText='position:fixed;left:8px;bottom:8px;background:rgba(0,0,0,.6);color:#fff;padding:6px 8px;border-radius:8px;font:12px/1.4 system-ui;z-index:99999';
+  box.id='debugHud'; box.textContent='boot';
+  window.addEventListener('DOMContentLoaded',()=>document.body.appendChild(box));
+  const log=msg=>box.textContent=msg;
+  window.addEventListener('error',e=>log('Error: '+e.message));
+  window.addEventListener('unhandledrejection',e=>log('Promise: '+(e.reason&&e.reason.message||e.reason)));
+  setInterval(()=>log('tick '+Math.floor(performance.now()/1000)),800);
+})();
+
+if('serviceWorker' in navigator){
+  addEventListener('load',()=>navigator.serviceWorker.register('./service-worker.js').catch(console.warn));
+}
+
+// Canvas取得（他ファイルの関数は実行時にctxを見るのでここでOK）
+cvs=document.getElementById('game'); ctx=cvs.getContext('2d');
+
+let last=performance.now();
+function loop(){
+  const n=performance.now(), dt=Math.min(.033,(n-last)/1000); last=n;
+
+  setScreen(); ctx.fillStyle='#102040'; ctx.fillRect(0,0,cvs.width/DPR,cvs.height/DPR); // 強制ペイント
+  sanitizeCam();
+
+  for(const r of residents) r.update(dt);
+  for(const n1 of npcs) n1.update(dt);
+  for(const a of animals) a.update(dt);
+  for(const f of floaters) f.update(dt); floaters=floaters.filter(f=>f.t<1.2);
+  for(const p of pulses) p.update(dt); pulses=pulses.filter(p=>p.life>0);
+
+  setWorld();
+  ctx.clearRect(cam.x, cam.y, viewSizeWorld().w, viewSizeWorld().h);
+  drawCity(); for(const s of stations) s.draw();
+  const zlist=[...inspirations, ...animals, ...npcs, ...residents, ...floaters, ...pulses];
+  zlist.sort((a,b)=>(a.y||0)-(b.y||0)); for(const it of zlist){ if(it.draw) it.draw(); }
+
+  setScreen();
+  const done=residents.filter(r=>r.state==='resolved').length;
+  document.getElementById('status').innerHTML=`進捗: <b>${done}/${residents.length}</b> ／ 住人: ${residents.length} ／ 群衆: ${npcs.length} ／ 動物: ${animals.length} ／ 建物: ${buildings.length}`;
+
+  requestAnimationFrame(loop);
+}
+
+function initAll(){
+  resize(); layoutWorld();
+  const legend=document.getElementById('legend');
+  legend.innerHTML = `<div><b>遊び方</b>：街に散らばるアイテム（📸🗺️👮📞♪💡）を拾い、住人に与える。悩みごとに反応/行き先/結末が変わる。</div>
+    <div><b>操作</b>：ピンチ=ズーム、2本指ドラッグ=パン、＋/－ボタン=ズーム</div>
+    <div><b>例</b>：💇×📸→💈で髪型チェンジ ／ ❓×👮→🏠まで付き添い ／ ❓×📞→まだ迷う</div>`;
+  updateHeldUI(); loop();
+}
+initAll();
+
+// ボタン
+document.getElementById('dropBtn').onclick=()=>{ if(!held)return; const p=screenToWorld(cvs.width/(2*DPR),cvs.height/(2*DPR)); held.x=p.x; held.y=p.y; inspirations.push(held); held=null; updateHeldUI(); }
+document.getElementById('resetBtn').onclick=()=>{ initAll(); }
+document.getElementById('zin').onclick=()=>{ cam.z=clamp(cam.z*1.15,zMin,zMax); }
+document.getElementById('zout').onclick=()=>{ cam.z=clamp(cam.z*0.87,zMin,zMax); }
+
+// PWA用キャッシュ（更新時は名前を +1）
+const CACHE = 'hint-town-v18';
+const ASSETS = ['./','./index.html'];
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting()));
+});
+self.addEventListener('activate', (event) => {
+  event.waitUntil(caches.keys().then(keys=>Promise.all(keys.map(k=>k!==CACHE?caches.delete(k):null))).then(()=>self.clients.claim()));
+});
+self.addEventListener('fetch', (event) => {
+  event.respondWith(
+    fetch(event.request).then(resp => {
+      const copy = resp.clone();
+      caches.open(CACHE).then(c => c.put(event.request, copy)).catch(()=>{});
+      return resp;
+    }).catch(()=>caches.match(event.request))
+  );
+});
