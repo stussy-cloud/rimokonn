@@ -1,5 +1,5 @@
 // service-worker.js 置き換え版
-const CACHE = 'hint-town-v13'; // ←番号を上げる
+const CACHE = 'hint-town-v14'; // ←番号を上げる
 const ASSETS = [
   './index.html',              // オフライン用に保持
   './manifest.webmanifest',
