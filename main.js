@@ -170,3 +170,32 @@ cvs.addEventListener('wheel', e=>{
     lg.open = false;
   }
 })();
+
+// ==== ヘルプ開閉（確実に動く版）====
+(() => {
+  const lg  = document.getElementById('legendWrap');
+  const btn = document.getElementById('helpBtn');
+  if (!lg || !btn) return;
+
+  const renderLegendState = () => {
+    const st = document.getElementById('status');
+    if (st) st.dataset.legend = lg.open ? 'open' : 'closed'; // デバッグフラグ
+  };
+
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    lg.open = !lg.open;
+    renderLegendState();
+  });
+
+  // Canvas操作のときは閉じる（被り防止）
+  cvs.addEventListener('pointerdown', () => { if (lg.open) { lg.open = false; renderLegendState(); } });
+
+  // モバイルは開始時に閉じておく
+  if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) {
+    lg.open = false;
+    renderLegendState();
+  }
+})();
+
