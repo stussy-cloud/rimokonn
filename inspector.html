@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>ヒントの町 – 自動診断/ファイルビューア</title>
+<style>
+  :root{--ink:#e6e7ff;--bg:#0f1224;--pane:#1a1f3c;--hl:#2a3162}
+  html,body{margin:0;background:linear-gradient(180deg,#0f1224,#15193a);color:var(--ink);font-family:system-ui, -apple-system, Segoe UI, Roboto, Noto Sans JP, Helvetica, Arial}
+  .wrap{max-width:1000px;margin:24px auto;padding:0 16px}
+  h1{font-size:20px;margin:0 0 12px}
+  .meta{font:12px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;opacity:.9}
+  .card{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:12px;margin:12px 0}
+  details{background:var(--pane);border:1px solid rgba(255,255,255,.15);border-radius:12px;margin:10px 0}
+  summary{cursor:pointer;padding:10px 12px;font-weight:bold}
+  pre{margin:0;padding:12px;overflow:auto;background:var(--bg);border-top:1px solid rgba(255,255,255,.12)}
+  .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .btn{cursor:pointer;border:1px solid rgba(255,255,255,.22);background:linear-gradient(180deg,rgba(255,255,255,.14),rgba(255,255,255,.06));
+       color:#fff;border-radius:10px;padding:6px 10px;font-weight:700;font-size:12px}
+  code{background:rgba(255,255,255,.08);padding:2px 6px;border-radius:6px}
+  .ok{color:#9cff9c}.warn{color:#ffd27d}.err{color:#ff9c9c}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>ヒントの町 – 自動診断 / ファイルビューア</h1>
+  <div class="meta" id="meta">loading…</div>
+
+  <div class="card">
+    <div class="row">
+      <button class="btn" id="refresh">🔄 再読込</button>
+      <button class="btn" id="openSafe">✅ Safe を開く</button>
+      <button class="btn" id="copySafe">📋 Safe URLをコピー</button>
+      <button class="btn" id="openPop">🎨 Pop を開く</button>
+      <button class="btn" id="copyPop">📋 Pop URLをコピー</button>
+    </div>
+  </div>
+
+  <div id="files"></div>
+</div>
+
+<script>
+const pagesBase = location.origin + location.pathname.replace(/\/[^/]*$/,''); // repo root
+const diagUrl   = pagesBase + '/diag.json';
+
+const $ = (sel)=>document.querySelector(sel);
+const el = (tag,props={})=>Object.assign(document.createElement(tag),props);
+
+async function copy(text){
+  try{ await navigator.clipboard.writeText(text); alert('コピーしました'); }
+  catch(e){ prompt('コピーできない端末です。手動でコピーしてください。', text); }
+}
+
+async function load(){
+  $('#meta').textContent = 'diag.json を取得中… ' + diagUrl;
+  let diag;
+  try {
+    const res = await fetch(diagUrl, {cache:'no-store'});
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    diag = await res.json();
+  } catch(e) {
+    $('#meta').innerHTML = `<span class="err">diag.json の取得に失敗：</span> ${e}`;
+    return;
+  }
+
+  const short = diag.short, when = diag.when, links = diag.links || {};
+  $('#meta').innerHTML = [
+    `commit: <b>${short}</b>`,
+    `when: ${when}`,
+    `pagesBase: <code>${diag.pagesBase}</code>`,
+  ].join(' / ');
+
+  // Safe/Pop ボタン
+  const safeURL = links.safe || `${diag.pagesBase}/?killsw=1&v=${short}&renderer=safe`;
+  const popURL  = links.pop  || `${diag.pagesBase}/?killsw=1&v=${short}&renderer=pop`;
+  $('#openSafe').onclick = ()=>open(safeURL, '_blank');
+  $('#copySafe').onclick = ()=>copy(safeURL);
+  $('#openPop').onclick  = ()=>open(popURL, '_blank');
+  $('#copyPop').onclick  = ()=>copy(popURL);
+
+  // ファイル一覧
+  const filesWrap = $('#files'); filesWrap.textContent='';
+  const files = diag.files || {};
+  const names = Object.keys(files);
+  if(!names.length){ filesWrap.textContent = 'diag.json に files 情報がありません。'; return; }
+
+  for(const name of names){
+    const info = files[name];
+    const box = el('details',{open:false});
+    const sum = el('summary');
+    sum.innerHTML = `${name} <span class="meta">/ size:${info.size}B / sha256:${info.sha256}</span>`;
+    const pre = el('pre',{textContent:'読み込み中…'});
+    const btnRow = el('div',{className:'row',style:'padding:10px 12px;gap:8px'});
+    const rawUrl = pagesBase + '/' + name;
+
+    const bOpen = el('button',{className:'btn',textContent:'🧪 別タブで開く'}); bOpen.onclick = ()=>open(rawUrl,'_blank');
+    const bCopyUrl = el('button',{className:'btn',textContent:'📋 URLコピー'}); bCopyUrl.onclick = ()=>copy(rawUrl);
+    const bCopyAll = el('button',{className:'btn',textContent:'📋 中身を全コピー'});
+
+    btnRow.append(bOpen,bCopyUrl,bCopyAll);
+    box.append(sum, btnRow, pre);
+    filesWrap.append(box);
+
+    fetch(rawUrl, {cache:'no-store'})
+      .then(r=>r.ok?r.text():Promise.reject('HTTP '+r.status))
+      .then(txt=>{
+        pre.textContent = txt;
+        bCopyAll.onclick = ()=>copy(txt);
+      })
+      .catch(err=>{
+        pre.textContent = '取得失敗: ' + err;
+      });
+  }
+}
+
+$('#refresh').onclick = load;
+load();
+</script>
+</body>
+</html>
