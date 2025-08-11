@@ -16,6 +16,10 @@
   details.legend{position:absolute;right:12px;top:12px;background:var(--pane);border:1px solid var(--pane2);border-radius:12px;padding:6px 10px;font-size:12px;max-width:300px; z-index:5; pointer-events:auto;}
   details.legend[open]{background:rgba(255,255,255,.1)}
   details.legend summary{cursor:pointer;list-style:none;user-select:none}
+  details.legend { z-index: 5; pointer-events: auto; }
+  details.legend summary { user-select: none; cursor: pointer; }
+  /* まれに UA によって summary の矢印が重なるので隠す */
+  details.legend summary::-webkit-details-marker { display: none; }
   .legend-body div{display:flex;gap:8px;align-items:center;margin:4px 0}
   .panel{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);display:grid;gap:10px;justify-items:center}
   .held{display:grid;grid-auto-flow:column;gap:10px;align-items:center;background:var(--pane);border:1px solid var(--pane2);backdrop-filter:blur(8px);padding:8px 12px;border-radius:14px}
