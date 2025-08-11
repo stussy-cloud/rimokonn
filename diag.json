@@ -1,12 +1,12 @@
 {
-  "sha": "3e79328b288a1076ea6a0f70d3c9dff9640ae05b",
-  "short": "3e79328",
-  "when": "2025-08-11T05:47:45Z",
+  "sha": "05238f2f56e2be2cda8da2f05052e80f10107931",
+  "short": "05238f2",
+  "when": "2025-08-11T06:12:13Z",
   "branch": "main",
   "pagesBase": "https://stussy-cloud.github.io/rimokonn",
   "links": {
-    "safe": "https://stussy-cloud.github.io/rimokonn/?killsw=1&v=3e79328&renderer=safe",
-    "pop":  "https://stussy-cloud.github.io/rimokonn/?killsw=1&v=3e79328&renderer=pop"
+    "safe": "https://stussy-cloud.github.io/rimokonn/?killsw=1&v=05238f2&renderer=safe",
+    "pop":  "https://stussy-cloud.github.io/rimokonn/?killsw=1&v=05238f2&renderer=pop"
   },
   "files": {
     "index.html": { "size": 7509, "sha256": "3ab649878ac1590166d2b6473c39bc9fa4b408c6f320ab2ff85ed0798408fe26" }    ,
@@ -14,7 +14,7 @@
     "city_safe.js": { "size": 3546, "sha256": "2b860c146f7872ece7b8352fd53aeb6af8df6f87711c8d1d65e322ff60041ec9" }    ,
     "city_pop.js": { "size": 6802, "sha256": "52b29c88f2bc3cdbf5bd30f3b140a8c5e39b873441374b0c921744939c8e455a" }    ,
     "entities.js": { "size": 1536, "sha256": "54936d3c616a0f2a2e36f9093c71327bac43a7ddef1bda5d40d08e08d6f79887" }    ,
-    "main.js": { "size": 5074, "sha256": "c055ae519d30f00cf00f3eb4dc67c74136d2d4676f77b912958b91e406197f9e" }    ,
+    "main.js": { "size": 5739, "sha256": "81669c7846e7775d22b9e7fe94cf156220c17f6cab04c7f84141e77ef3f43d59" }    ,
     "service-worker.js": { "size": 4673, "sha256": "6e78b89b1d5f9fd9764f6612d6272f72b684b48d4a6abc89e97b3203dfc98206" }    ,
     "polyfills.js": { "size": 717, "sha256": "ddad575b9cb584206013e5b7e9871627f7d51278c073c13001dd8ca0c1d505d8" }    ,
     "manifest.webmanifest": { "size": 433, "sha256": "a3c3ff3b390036bacf2ea02d5b78f1b8e18e68a30513e9fe55660ce455eee5b9" }
