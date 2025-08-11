@@ -1,18 +1,22 @@
 'use strict';
 
-// ====== グローバル・ユーティリティ（どのモジュールより先に読み込まれる） ======
+/* ========= グローバル・ユーティリティ =========
+   どのモジュールよりも先に読み込まれる。ここに無い util 名は使わない運用にします。
+*/
 (function(){
-  // Math.random をラップ（範囲付き）
   function rand(min=0, max=1){ return min + Math.random()*(max-min); }
   function irand(min, max){ return Math.floor(rand(min, max+1)); }
-  function choose(arr){ return arr[(Math.random()*arr.length)|0]; }
+  function pick(arr){ return arr[(Math.random()*arr.length)|0]; }   // ← これを全体で使う
+  function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
+
   // 共有
-  window.rand = window.rand || rand;
-  window.irand = window.irand || irand;
-  window.choose = window.choose || choose;
+  window.rand   = window.rand   || rand;
+  window.irand  = window.irand  || irand;
+  window.pick   = window.pick   || pick;
+  window.clamp  = window.clamp  || clamp;
 })();
 
-// ====== 基本設定 ======
+/* ========= 基本設定 ========= */
 const DPR = Math.min(2, (window.devicePixelRatio||1));
 let cvs, ctx;
 
@@ -22,45 +26,38 @@ const CONFIG = {
   roadW: 18,
 };
 
-// Feature Flags（pop 側のON/OFFに使用）
+// pop の描写オプション（段階的にON/OFF）
 const FLAGS = {
-  parks: true,
-  lakes: true,
-  outlines: true,
-  roofHL: true,
+  parks:   true,
+  lakes:   true,
+  outlines:true,
+  roofHL:  true,
 };
 
-// パフォーマンス感度（低端末だと 30fps）
+// 低端末向け（true で 30fps 想定）
 const PERF = { low: false };
 
-// ====== カメラと座標変換 ======
+/* ========= カメラ・座標 ========= */
 const cam = { x: 0, y: 0, z: 0.6 };
 const zMin = 0.35, zMax = 2.0;
-
-function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
 
 function viewSizeWorld(){
   const vw = (cvs.width  / DPR) / cam.z;
   const vh = (cvs.height / DPR) / cam.z;
   return { w: vw, h: vh };
 }
-
 function screenToWorld(px, py){
-  const vx = px / cam.z;
-  const vy = py / cam.z;
+  const vx = px / cam.z, vy = py / cam.z;
   return { x: cam.x + vx, y: cam.y + vy };
 }
-
 function setScreen(){ ctx.setTransform(1,0,0,1,0,0); }
-function setWorld(){ ctx.setTransform(cam.z,0,0,cam.z, -cam.x*cam.z, -cam.y*cam.z); }
-
+function setWorld(){  ctx.setTransform(cam.z,0,0,cam.z, -cam.x*cam.z, -cam.y*cam.z); }
 function sanitizeCam(){
   const v = viewSizeWorld();
   cam.x = clamp(cam.x, 0, CONFIG.world.w - v.w);
   cam.y = clamp(cam.y, 0, CONFIG.world.h - v.h);
   cam.z = clamp(cam.z, zMin, zMax);
 }
-
 function resize(){
   const r = cvs.getBoundingClientRect();
   cvs.width  = Math.max(1, Math.floor(r.width  * DPR));
@@ -68,17 +65,18 @@ function resize(){
   setScreen(); ctx.clearRect(0,0,cvs.width/DPR,cvs.height/DPR); setWorld();
 }
 
-// 画面サイズに合わせる（キャンバスCSS）
+// マウント
 (function mountCanvas(){
   cvs = document.getElementById('game');
   ctx = cvs.getContext('2d');
-  const wrap = cvs.parentElement;
-  cvs.style.width = 'calc(100vw - 48px)';
-  cvs.style.height = 'calc(70vh)';
+  // レイアウト：端末ごとに安定して広く
+  cvs.style.width  = 'calc(100vw - 48px)';
+  cvs.style.height = '70vh';
   resize();
   addEventListener('resize', resize);
 })();
 
+/* ========= export ========= */
 window.CONFIG = CONFIG;
 window.FLAGS = FLAGS;
 window.PERF = PERF;
@@ -89,5 +87,5 @@ window.setScreen = setScreen;
 window.setWorld = setWorld;
 window.resize = resize;
 window.sanitizeCam = sanitizeCam;
-window.clamp = clamp;
 window.DPR = DPR;
+window.zMin = 0.35; window.zMax = 2.0;
