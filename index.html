@@ -1,127 +1,148 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<meta name="theme-color" content="#0f1224"/>
-<title>ヒントの町 – ポップシティ v0.6.3</title>
-<style>
-  :root{ --bg1:#0f1224; --bg2:#15193a; --ink:#e6e7ff; --pane:rgba(255,255,255,.08); --pane2:rgba(255,255,255,.12); }
-  html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg1),var(--bg2));color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,Noto Sans JP,Helvetica,Arial}
-  .wrap{display:grid;place-items:center;height:100%;gap:16px}
-  .hud{position:absolute;left:12px;top:12px;font-size:14px;line-height:1.4;pointer-events:none;text-shadow:0 1px 0 rgba(0,0,0,.35); z-index:4;}
-  .hud h1{margin:0 0 8px;font-size:20px}
-  .pill{display:inline-block;background:var(--pane);border:1px solid var(--pane2);padding:3px 8px;border-radius:999px;margin-right:8px}
-  canvas{border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.4), inset 0 0 0 1px rgba(255,255,255,.08);touch-action:none; z-index:1;}
-  details.legend{position:absolute;right:12px;top:12px;background:var(--pane);border:1px solid var(--pane2);border-radius:12px;padding:6px 10px;font-size:12px;max-width:300px; z-index:5; pointer-events:auto;}
-  details.legend[open]{background:rgba(255,255,255,.1)}
-  details.legend summary{cursor:pointer;list-style:none;user-select:none}
-  .legend-body div{display:flex;gap:8px;align-items:center;margin:4px 0}
-  .panel{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);display:grid;gap:10px;justify-items:center}
-  .held{display:grid;grid-auto-flow:column;gap:10px;align-items:center;background:var(--pane);border:1px solid var(--pane2);backdrop-filter:blur(8px);padding:8px 12px;border-radius:14px}
-  .btn{pointer-events:all;cursor:pointer;display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(255,255,255,.18);
-    background:linear-gradient(180deg,rgba(255,255,255,.12),rgba(255,255,255,.06));padding:6px 10px;border-radius:12px;color:#fff;text-decoration:none;font-weight:700;font-size:12px}
-  .zoomBtns{position:absolute;right:12px;bottom:12px;display:grid;gap:8px}
-  /* スマホ最適化 */
-  details.legend{ max-width: 80vw; }
-  @media (max-width: 480px){
-    .hud{ font-size:12px; }
-    details.legend{ right:8px; top:8px; font-size:11px; max-width: 72vw; }
-    .panel{ gap:8px }
-    .btn{ padding:6px 10px; font-size:11px }
-  }
-</style>
-</head>
-<body>
-<div class="wrap">
-  <!-- ★ main.js は #game を参照します。id を変えないでください -->
-  <canvas id="game" width="960" height="600" aria-label="game"></canvas>
+'use strict';
 
-  <div class="hud">
-    <h1>ヒントの町 v0.6.3 <span class="pill">タップ: 拾う/与える</span><span class="pill">ピンチ: ズーム</span><span class="pill">2本指ドラッグ: パン</span></h1>
-    <div id="status" style="font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;"></div>
-  </div>
+// ====== 起動 ======
+cvs = document.getElementById('game');
+ctx = cvs.getContext('2d');
+resize();
 
-  <details class="legend" id="legendWrap" open>
-    <summary>ℹ️ ヘルプ（タップで開閉）</summary>
-    <div id="legend" class="legend-body"></div>
-  </details>
-
-  <div class="panel">
-    <div class="held">選択中：<span id="heldIcon">なし</span>
-      <button class="btn" id="dropBtn">捨てる</button>
-      <button class="btn" id="resetBtn">リセット</button>
-    </div>
-  </div>
-
-  <div class="zoomBtns">
-    <button class="btn" id="zin">＋</button>
-    <button class="btn" id="zout">－</button>
-  </div>
-</div>
-
-<!-- SWキルスイッチ（?killsw=1でSW解除→自動再読込） -->
-<script>
-(() => {
-  const qs = new URLSearchParams(location.search);
-  if (qs.get('killsw') === '1' && 'serviceWorker' in navigator) {
-    navigator.serviceWorker.getRegistrations().then(rs => {
-      rs.forEach(r => r.unregister());
-      location.replace(location.origin + location.pathname + '?nocache=' + Date.now() + '&v=' + (qs.get('v')||''));
-    });
-  }
+// 初期カメラ（中心）
+(function initCamCenter() {
+  const v = viewSizeWorld();
+  cam.x = (CONFIG.world.w - v.w) / 2;
+  cam.y = (CONFIG.world.h - v.h) / 2;
+  cam.z = 0.6;
+  sanitizeCam();
 })();
-</script>
 
-<!-- 自動バージョン読み込み + 診断ローダー -->
-<script>
-(function(){
-  const v = new URLSearchParams(location.search).get('v') || ('dev-' + Date.now());
-  window.__diag = { v, scripts: [], errors: [], sw: 'checking...' };
+// モバイルはヘルプ閉じ
+try { if (PERF.low) document.getElementById('legendWrap').open = false; } catch(e){}
 
+// ====== HUD 診断 ======
+const __V = new URLSearchParams(location.search).get('v') || 'dev';
+function diag() {
   const st = document.getElementById('status');
-  function sizeOf(c){ try{ return (c && c.width) ? (c.width+'x'+c.height) : 'null'; }catch(_){ return 'null'; } }
-  function ok(x){ return (typeof x !== 'undefined') ? (typeof x==='function'?'ƒ':'●') : '×'; }
-  function render(){
-    const sNames = __diag.scripts.map(s=>s.name).join(',');
-    const err    = __diag.errors.length ? __diag.errors[__diag.errors.length-1] : 'none';
-    const citySz = sizeOf(window.CITY_LAYER);
-    st.innerHTML =
-      `build: <b>${__diag.v}</b> / loaded:[${sNames}] / err:${err}` +
-      ` / SW:${__diag.sw}` +
-      ` / drawCityFast:${ok(window.drawCityFast)} / CITY_LAYER:${citySz}` +
-      (typeof window.CITY_NEEDS_REBUILD!=='undefined' ? ` / NEEDS_REBUILD:${window.CITY_NEEDS_REBUILD}` : '');
-  }
-  window.addEventListener('error', e=>{ __diag.errors.push(e.message || e.type); render(); });
-  window.addEventListener('unhandledrejection', e=>{ __diag.errors.push('promise:'+(e.reason&&e.reason.message||e.reason)); render(); });
+  if (!st) return;
+  const ok = (x)=> typeof x!=='undefined' ? (typeof x==='function'?'ƒ':'●') : '×';
+  const size = (c)=> (c && c.width) ? `${c.width}x${c.height}` : 'null';
+  st.innerHTML = `build:<b>${__V}</b> / drawCityFast:${ok(drawCityFast)} / CITY_LAYER:${size(window.CITY_LAYER)} / cam:x=${cam.x.toFixed(1)} y=${cam.y.toFixed(1)} z=${cam.z.toFixed(2)}`;
+}
+addEventListener('error', e => { const st=document.getElementById('status'); if(st) st.innerHTML = 'SCRIPT ERROR: ' + (e.message||e.type); });
+addEventListener('unhandledrejection', e => { const st=document.getElementById('status'); if(st) st.innerHTML = 'PROMISE ERROR: ' + (e.reason&&e.reason.message||e.reason); });
 
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.getRegistrations().then(rs=>{
-      const a = rs.find(r=>r.active);
-      __diag.sw = a ? (a.active && a.active.scriptURL ? a.active.scriptURL.split('/').pop() : 'active') : 'none';
-      render();
-    });
-  } else {
-    __diag.sw = 'unsupported';
+// ====== ループ ======
+let last = performance.now();
+let acc = 0;
+let interval = PERF.low ? 1000/30 : 1000/60;
+
+function loop(){
+  const now = performance.now();
+  const dt = Math.min(0.033, (now - last)/1000);
+  last = now; acc += dt*1000;
+
+  sanitizeCam();
+  if (typeof updateEntities === 'function') updateEntities(dt);
+
+  if (acc >= interval){
+    acc = 0;
+
+    // 背景：常に drawCityFast を呼ぶ（内部で必要なら再生成）
+    try{
+      if (typeof drawCityFast === 'function') {
+        drawCityFast();
+      } else if (typeof drawCity === 'function') {
+        drawCity();
+      } else {
+        throw new Error('drawCityFast/drawCity not found');
+      }
+    }catch(e){
+      setScreen(); ctx.fillStyle='#f66'; ctx.font='bold 14px system-ui';
+      ctx.fillText('DRAW ERROR: ' + e.message, 12, 18); setWorld();
+    }
+
+    if (typeof drawEntities === 'function') drawEntities();
+
+    diag();
   }
 
-  function add(name, src){
-    return new Promise((resolve,reject)=>{
-      const s = document.createElement('script');
-      s.src = src + '?v=' + encodeURIComponent(v);
-      s.onload = ()=>{ __diag.scripts.push({name, url:s.src}); render(); resolve(); };
-      s.onerror = (e)=>{ __diag.errors.push('load:'+name); render(); reject(e); };
-      document.body.appendChild(s);
-    });
-  }
+  requestAnimationFrame(loop);
+}
 
-  add('config','./config.js')
-    .then(()=>add('city','./city.js'))
-    .then(()=>add('entities','./entities.js'))
-    .then(()=>add('main','./main.js'))
-    .catch(()=>{})
-    .finally(()=>{ render(); setInterval(render, 1000); });
+// 初期生成
+if (typeof initEntities === 'function') initEntities();
+loop();
+
+// ====== 入力（ピンチ＝ズーム、1本指ドラッグ＝パン、ホイールズーム、＋/−） ======
+function zoomAt(px, py, factor){
+  const before = screenToWorld(px, py);
+  cam.z = clamp(cam.z * factor, zMin, zMax);
+  const after = screenToWorld(px, py);
+  cam.x += before.x - after.x;
+  cam.y += before.y - after.y;
+  sanitizeCam();
+}
+
+// タッチ
+let fingers = new Map(); let startDist=0,startZ=cam.z,startMid=null;
+function distance(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
+function midpoint(a,b){ return {x:(a.x+b.x)/2, y:(a.y+b.y)/2}; }
+
+cvs.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  for(const t of e.changedTouches){ fingers.set(t.identifier,{x:t.clientX,y:t.clientY,dx:0,dy:0}); }
+  if (fingers.size===2){ const [a,b]=[...fingers.values()]; startDist=distance(a,b); startZ=cam.z; startMid=midpoint(a,b); }
+},{passive:false});
+
+cvs.addEventListener('touchmove',e=>{
+  e.preventDefault();
+  for(const t of e.changedTouches){
+    const o=fingers.get(t.identifier); if(!o) continue;
+    o.dx=t.clientX-o.x; o.dy=t.clientY-o.y; o.x=t.clientX; o.y=t.clientY;
+  }
+  if (fingers.size===2){
+    const [a,b]=[...fingers.values()]; const cur=distance(a,b);
+    const scale = clamp(cur/Math.max(1,startDist), 0.3, 3);
+    const r=cvs.getBoundingClientRect();
+    const before=screenToWorld(startMid.x-r.left, startMid.y-r.top);
+    cam.z = clamp(startZ*scale, zMin, zMax);
+    const after=screenToWorld(startMid.x-r.left, startMid.y-r.top);
+    cam.x += before.x-after.x; cam.y += before.y-after.y;
+  } else if (fingers.size===1){
+    const [f]=[...fingers.values()];
+    const v=viewSizeWorld();
+    cam.x = clamp(cam.x - f.dx/cam.z, 0, CONFIG.world.w - v.w);
+    cam.y = clamp(cam.y - f.dy/cam.z, 0, CONFIG.world.h - v.h);
+  }
+  sanitizeCam();
+},{passive:false});
+
+function endTouches(e){ for(const t of e.changedTouches) fingers.delete(t.identifier); }
+cvs.addEventListener('touchend',endTouches,{passive:true});
+cvs.addEventListener('touchcancel',endTouches,{passive:true});
+
+// マウス
+let dragging=false, lastMouse={x:0,y:0};
+cvs.addEventListener('mousedown', e=>{ dragging=true; lastMouse={x:e.clientX,y:e.clientY}; });
+addEventListener('mousemove', e=>{
+  if(!dragging) return;
+  const dx=(e.clientX-lastMouse.x)/cam.z, dy=(e.clientY-lastMouse.y)/cam.z;
+  const v=viewSizeWorld();
+  cam.x = clamp(cam.x - dx, 0, CONFIG.world.w - v.w);
+  cam.y = clamp(cam.y - dy, 0, CONFIG.world.h - v.h);
+  lastMouse={x:e.clientX,y:e.clientY};
+});
+addEventListener('mouseup', ()=> dragging=false);
+
+cvs.addEventListener('wheel', e=>{
+  e.preventDefault();
+  const r=cvs.getBoundingClientRect();
+  zoomAt(e.clientX-r.left, e.clientY-r.top, e.deltaY>0?0.9:1.1);
+},{passive:false});
+
+// ＋ / －
+(() => {
+  const zin=document.getElementById('zin'), zout=document.getElementById('zout');
+  if(!zin||!zout) return;
+  const cx=()=>cvs.width/(2*DPR), cy=()=>cvs.height/(2*DPR);
+  zin.addEventListener('click', ()=>zoomAt(cx(),cy(),1.15));
+  zout.addEventListener('click', ()=>zoomAt(cx(),cy(),0.87));
 })();
-</script>
-</body>
-</html>
