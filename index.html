@@ -5,30 +5,32 @@
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <meta name="theme-color" content="#0f1224"/>
 <title>ヒントの町 – ポップシティ v0.6.3</title>
-<!-- 追加：ヘルプ開閉ボタン -->
-<button class="pill" id="helpBtn" style="cursor:pointer; pointer-events:auto;">ℹ️ ヘルプ</button>
 <style>
   :root{ --bg1:#0f1224; --bg2:#15193a; --ink:#e6e7ff; --pane:rgba(255,255,255,.08); --pane2:rgba(255,255,255,.12); }
   html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg1),var(--bg2));color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,Noto Sans JP,Helvetica,Arial}
   .wrap{display:grid;place-items:center;height:100%;gap:16px}
+
   .hud{position:absolute;left:12px;top:12px;font-size:14px;line-height:1.4;pointer-events:none;text-shadow:0 1px 0 rgba(0,0,0,.35); z-index:4;}
   .hud h1{margin:0 0 8px;font-size:20px}
   .pill{display:inline-block;background:var(--pane);border:1px solid var(--pane2);padding:3px 8px;border-radius:999px;margin-right:8px}
+  /* ← hud 全体は pointer-events:none なので、ボタンだけ許可 */
+  .hud #helpBtn{ pointer-events:auto; cursor:pointer; }
+
   canvas{border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.4), inset 0 0 0 1px rgba(255,255,255,.08);touch-action:none; z-index:1;}
+
   details.legend{position:absolute;right:12px;top:12px;background:var(--pane);border:1px solid var(--pane2);border-radius:12px;padding:6px 10px;font-size:12px;max-width:300px; z-index:5; pointer-events:auto;}
   details.legend[open]{background:rgba(255,255,255,.1)}
-  details.legend summary{cursor:pointer;list-style:none;user-select:none}
-  details.legend summary { display:none; }         /* ← 追加 */
-  details.legend { z-index: 5; pointer-events: auto; }
-  details.legend summary { user-select: none; cursor: pointer; }
-  /* まれに UA によって summary の矢印が重なるので隠す */
-  details.legend summary::-webkit-details-marker { display: none; }
+  /* summary は使わず、専用ボタンで開閉する */
+  details.legend summary{ display:none; }
+  details.legend summary::-webkit-details-marker{ display:none; }
   .legend-body div{display:flex;gap:8px;align-items:center;margin:4px 0}
+
   .panel{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);display:grid;gap:10px;justify-items:center}
   .held{display:grid;grid-auto-flow:column;gap:10px;align-items:center;background:var(--pane);border:1px solid var(--pane2);backdrop-filter:blur(8px);padding:8px 12px;border-radius:14px}
   .btn{pointer-events:all;cursor:pointer;display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(255,255,255,.18);
     background:linear-gradient(180deg,rgba(255,255,255,.12),rgba(255,255,255,.06));padding:6px 10px;border-radius:12px;color:#fff;text-decoration:none;font-weight:700;font-size:12px}
   .zoomBtns{position:absolute;right:12px;bottom:12px;display:grid;gap:8px}
+
   /* スマホ最適化 */
   details.legend{ max-width: 80vw; }
   @media (max-width: 480px){
@@ -41,17 +43,27 @@
 </head>
 <body>
 <div class="wrap">
-  <!-- ★ main.js は #game を参照します。id を変えないでください -->
+  <!-- main.js は #game を参照します -->
   <canvas id="game" width="960" height="600" aria-label="game"></canvas>
 
   <div class="hud">
-    <h1>ヒントの町 v0.6.3 <span class="pill">タップ: 拾う/与える</span><span class="pill">ピンチ: ズーム</span><span class="pill">2本指ドラッグ: パン</span></h1>
-    <div id="status" style="font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;"></div>
+    <h1>
+      ヒントの町 v0.6.3
+      <span class="pill">タップ: 拾う/与える</span>
+      <span class="pill">ピンチ: ズーム</span>
+      <span class="pill">2本指ドラッグ: パン</span>
+      <!-- 専用ヘルプボタン（必ず開閉） -->
+      <button class="pill" id="helpBtn">ℹ️ ヘルプ</button>
+    </h1>
+    <div id="status" style="font-family: ui-monospace, Menlo, Consolas, monospace;"></div>
   </div>
 
   <details class="legend" id="legendWrap" open>
-    <summary>ℹ️ ヘルプ（タップで開閉）</summary>
-    <div id="legend" class="legend-body"></div>
+    <summary>ヘルプ</summary>
+    <div id="legend" class="legend-body">
+      <div>このパネルは右上の「ℹ️ ヘルプ」ボタンで開閉します。</div>
+      <div>ピンチでズーム、ドラッグでパン。＋/－ボタンでもズームできます。</div>
+    </div>
   </details>
 
   <div class="panel">
@@ -97,7 +109,8 @@
       `build: <b>${__diag.v}</b> / loaded:[${sNames}] / err:${err}` +
       ` / SW:${__diag.sw}` +
       ` / drawCityFast:${ok(window.drawCityFast)} / CITY_LAYER:${citySz}` +
-      (typeof window.CITY_NEEDS_REBUILD!=='undefined' ? ` / NEEDS_REBUILD:${window.CITY_NEEDS_REBUILD}` : '');
+      (typeof window.CITY_NEEDS_REBUILD!=='undefined' ? ` / NEEDS_REBUILD:${window.CITY_NEEDS_REBUILD}` : '') +
+      (window.cam ? ` / cam:x=${cam.x.toFixed(1)} y=${cam.y.toFixed(1)} z=${cam.z.toFixed(2)}` : '');
   }
   window.addEventListener('error', e=>{ __diag.errors.push(e.message || e.type); render(); });
   window.addEventListener('unhandledrejection', e=>{ __diag.errors.push('promise:'+(e.reason&&e.reason.message||e.reason)); render(); });
@@ -122,6 +135,7 @@
     });
   }
 
+  // 読み込み順を保証
   add('config','./config.js')
     .then(()=>add('city','./city.js'))
     .then(()=>add('entities','./entities.js'))
