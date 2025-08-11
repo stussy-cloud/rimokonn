@@ -9,11 +9,11 @@
   :root{ --bg1:#0f1224; --bg2:#15193a; --ink:#e6e7ff; --pane:rgba(255,255,255,.08); --pane2:rgba(255,255,255,.12); }
   html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg1),var(--bg2));color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,Noto Sans JP,Helvetica,Arial}
   .wrap{display:grid;place-items:center;height:100%;gap:16px}
-  .hud{position:absolute;left:12px;top:12px;font-size:14px;line-height:1.4;pointer-events:none;text-shadow:0 1px 0 rgba(0,0,0,.35)}
+  .hud{position:absolute;left:12px;top:12px;font-size:14px;line-height:1.4;pointer-events:none;text-shadow:0 1px 0 rgba(0,0,0,.35); z-index:4;}
   .hud h1{margin:0 0 8px;font-size:20px}
   .pill{display:inline-block;background:var(--pane);border:1px solid var(--pane2);padding:3px 8px;border-radius:999px;margin-right:8px}
-  canvas{border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.4), inset 0 0 0 1px rgba(255,255,255,.08);touch-action:none}
-  details.legend{position:absolute;right:12px;top:12px;background:var(--pane);border:1px solid var(--pane2);border-radius:12px;padding:6px 10px;font-size:12px;max-width:300px}
+  canvas{border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.4), inset 0 0 0 1px rgba(255,255,255,.08);touch-action:none; z-index:1;}
+  details.legend{position:absolute;right:12px;top:12px;background:var(--pane);border:1px solid var(--pane2);border-radius:12px;padding:6px 10px;font-size:12px;max-width:300px; z-index:5; pointer-events:auto;}
   details.legend[open]{background:rgba(255,255,255,.1)}
   details.legend summary{cursor:pointer;list-style:none;user-select:none}
   .legend-body div{display:flex;gap:8px;align-items:center;margin:4px 0}
@@ -22,19 +22,14 @@
   .btn{pointer-events:all;cursor:pointer;display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(255,255,255,.18);
     background:linear-gradient(180deg,rgba(255,255,255,.12),rgba(255,255,255,.06));padding:6px 10px;border-radius:12px;color:#fff;text-decoration:none;font-weight:700;font-size:12px}
   .zoomBtns{position:absolute;right:12px;bottom:12px;display:grid;gap:8px}
-  /* === 追加：スマホ最適化＆レイヤ順 === */
-.hud{ z-index:4; }                 /* 文字は前面だが操作は邪魔しない */
-details.legend{ z-index:5; pointer-events:auto; } /* タップ可能に */
-canvas{ z-index:1; }
-
-/* ヘルプを小さく＆幅を抑える */
-details.legend{ max-width: 80vw; }
-@media (max-width: 480px){
-  .hud{ font-size:12px; }
-  details.legend{ right:8px; top:8px; font-size:11px; max-width: 72vw; }
-  .panel{ gap:8px }
-  .btn{ padding:6px 10px; font-size:11px }
-}
+  /* スマホ最適化 */
+  details.legend{ max-width: 80vw; }
+  @media (max-width: 480px){
+    .hud{ font-size:12px; }
+    details.legend{ right:8px; top:8px; font-size:11px; max-width: 72vw; }
+    .panel{ gap:8px }
+    .btn{ padding:6px 10px; font-size:11px }
+  }
 </style>
 </head>
 <body>
@@ -71,22 +66,37 @@ details.legend{ max-width: 80vw; }
   if (qs.get('killsw') === '1' && 'serviceWorker' in navigator) {
     navigator.serviceWorker.getRegistrations().then(rs => {
       rs.forEach(r => r.unregister());
-      location.replace(location.origin + location.pathname + '?nocache=' + Date.now());
+      location.replace(location.origin + location.pathname + '?nocache=' + Date.now() + '&v=' + (qs.get('v')||''));
     });
   }
 })();
 </script>
 
-<!-- スクリプト群（順番厳守） -->
-<script src="./config.js?v=perf16"></script>
-<script src="./city.js?v=perf16"></script>
-<script src="./entities.js?v=perf16"></script>
-<script src="./main.js?v=perf16"></script>
-
+<!-- 自動バージョン読み込みローダー -->
 <script>
-  const v = 'perf16';
-  document.getElementById('status').insertAdjacentHTML('beforeend', ' / build: <b>' + v + '</b>');
+(function(){
+  const v = new URLSearchParams(location.search).get('v') || ('dev-' + Date.now());
+  const add = (src) => new Promise((resolve,reject)=>{
+    const s = document.createElement('script');
+    s.src = src + '?v=' + encodeURIComponent(v);
+    s.onload = resolve;
+    s.onerror = reject;
+    document.body.appendChild(s);
+  });
+  // 読み込み順を保証
+  add('./config.js')
+    .then(()=>add('./city.js'))
+    .then(()=>add('./entities.js'))
+    .then(()=>add('./main.js'))
+    .catch(err=>{
+      const st=document.getElementById('status');
+      st.innerText = 'SCRIPT LOAD ERROR: ' + (err && err.message || err);
+    })
+    .finally(()=>{
+      const st=document.getElementById('status');
+      st.insertAdjacentHTML('beforeend',' / build: <b>'+v+'</b>');
+    });
+})();
 </script>
-
 </body>
 </html>
