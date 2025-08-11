@@ -1,14 +1,17 @@
 'use strict';
 
+// ===== City layer (POP renderer) =====
 let CITY_LAYER = null;
-let CITY_SCALE = 0.42;
+let CITY_SCALE = 0.42;        // レイヤ解像度（世界に対する縮小率）
 let CITY_W = 0, CITY_H = 0;
 let CITY_NEEDS_REBUILD = true;
 
+// 小さなPRNG（デザイン用のランダム）
 function RNDseed(a){return function(){let t=a+=0x6D2B79F5;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return ((t^t>>>14)>>>0)/4294967296;}}
 const RND = RNDseed(20250811);
 
-(function(){
+// 角丸パス（軽量）
+(() => {
   if (!CanvasRenderingContext2D.prototype.roundRectF){
     CanvasRenderingContext2D.prototype.roundRectF = function(x,y,w,h,r){
       r=Math.max(0,Math.min(r,w/2,h/2));
@@ -34,18 +37,30 @@ const THEME = {
 function pick(a){ return a[(RND()*a.length)|0]; }
 function jit(a,b){ return a + RND()*(b-a); }
 
+// ===== レイヤ生成（世界座標で描いてOK） =====
 function buildCityLayerPop(){
-  CITY_W = CONFIG.world.w; CITY_H = CONFIG.world.h;
+  CITY_W = CONFIG.world.w; 
+  CITY_H = CONFIG.world.h;
+
   const can = document.createElement('canvas');
   can.width  = Math.max(1, Math.floor(CITY_W * CITY_SCALE));
   can.height = Math.max(1, Math.floor(CITY_H * CITY_SCALE));
-  const g = can.getContext('2d'); g.imageSmoothingEnabled=true; g.scale(CITY_SCALE,CITY_SCALE);
 
-  const grd=g.createLinearGradient(0,0,0,CITY_H); grd.addColorStop(0,THEME.groundTop); grd.addColorStop(1,THEME.groundBottom);
+  const g = can.getContext('2d', { alpha:false });
+  g.imageSmoothingEnabled = false;       // ← ぼかさない
+  g.scale(CITY_SCALE, CITY_SCALE);       // 世界→レイヤ解像度
+
+  // 地面グラデ
+  const grd=g.createLinearGradient(0,0,0,CITY_H);
+  grd.addColorStop(0,THEME.groundTop); 
+  grd.addColorStop(1,THEME.groundBottom);
   g.fillStyle=grd; g.fillRect(0,0,CITY_W,CITY_H);
 
   const GAP=CONFIG.roadGap, RW=CONFIG.roadW;
-  g.fillStyle=THEME.road; for(let x=0;x<CITY_W;x+=GAP) g.fillRect(x,0,RW,CITY_H);
+
+  // 道路
+  g.fillStyle=THEME.road;
+  for(let x=0;x<CITY_W;x+=GAP) g.fillRect(x,0,RW,CITY_H);
   for(let y=0;y<CITY_H;y+=GAP) g.fillRect(0,y,CITY_W,RW);
 
   // 道路エッジ
@@ -54,7 +69,7 @@ function buildCityLayerPop(){
   for(let y=0;y<CITY_H;y+=GAP) g.fillRect(0,y+RW-1,CITY_W,1);
   g.globalAlpha=1;
 
-  // 横断歩道
+  // 横断歩道（控えめ）
   g.fillStyle=THEME.crosswalk; g.globalAlpha=0.85;
   for(let x=0;x<CITY_W;x+=GAP*2){
     for(let y=0;y<CITY_H;y+=GAP*2){
@@ -64,7 +79,7 @@ function buildCityLayerPop(){
   }
   g.globalAlpha=1;
 
-  // 舗装ノイズ
+  // 舗装ノイズ（軽量）
   g.globalAlpha=0.05; g.fillStyle='#ffffff';
   for(let i=0;i<4500;i++){ const x=RND()*CITY_W,y=RND()*CITY_H,s=RND()*1.4; g.fillRect(x,y,s,s); }
   g.globalAlpha=1;
@@ -92,6 +107,7 @@ function buildCityLayerPop(){
         if (FLAGS.roofHL){
           g.fillStyle='#ffffff2a'; g.roundRectF(x+3,y+3,w-6,10,corner-4).fill();
         }
+
         // 窓帯（軽量）
         g.fillStyle='#ffffff20'; const rows = 1 + (RND()*2|0);
         for(let r=0;r<rows;r++){ g.fillRect(x+8, y+14+r*14, w-16, 6); }
@@ -136,18 +152,33 @@ function buildCityLayerPop(){
     }
   }
 
-  CITY_LAYER = can; CITY_NEEDS_REBUILD=false;
-  window.CITY_LAYER = CITY_LAYER; window.CITY_NEEDS_REBUILD = CITY_NEEDS_REBUILD;
+  CITY_LAYER = can;
+  CITY_NEEDS_REBUILD=false;
+
+  // デバッグ用に表面化
+  window.CITY_LAYER = CITY_LAYER; 
+  window.CITY_NEEDS_REBUILD = CITY_NEEDS_REBUILD;
   window.__diag && (__diag.counts = {buildings:bCount, parks:pCount, lakes:lCount});
 }
 
+// ===== 背景描画（世界座標で丸ごと貼る：端の空白を防止） =====
 function drawCityFast(){
-  if (!CITY_LAYER || CITY_NEEDS_REBUILD || CITY_W!==CONFIG.world.w || CITY_H!==CONFIG.world.h) buildCityLayerPop();
-  const dw=cvs.width/DPR, dh=cvs.height/DPR, vw=viewSizeWorld();
-  const sx=cam.x*CITY_SCALE, sy=cam.y*CITY_SCALE, sw=vw.w*CITY_SCALE, sh=vw.h*CITY_SCALE;
-  setScreen(); ctx.imageSmoothingEnabled=false; ctx.drawImage(CITY_LAYER, sx,sy,sw,sh, 0,0, dw,dh); setWorld();
+  if (!CITY_LAYER || CITY_NEEDS_REBUILD || CITY_W!==CONFIG.world.w || CITY_H!==CONFIG.world.h) {
+    buildCityLayerPop();
+  }
+  // 以降は“世界座標”で貼る。変換は setWorld() が適用してくれる前提。
+  //   src: レイヤ全域（CITY_SCALEで縮小済み）
+  //   dst: 世界サイズ（CITY_W×CITY_H）に拡大して貼る
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(
+    CITY_LAYER,
+    0, 0, CITY_LAYER.width, CITY_LAYER.height,
+    0, 0, CITY_W, CITY_H
+  );
 }
 
+// ===== イベント =====
 addEventListener('resize', ()=>{ CITY_NEEDS_REBUILD=true; window.CITY_NEEDS_REBUILD=true; });
 
+// 外部公開
 window.drawCityFast = drawCityFast;
