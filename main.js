@@ -1,10 +1,11 @@
 'use strict';
 
+// ===== Canvas & ctx =====
 cvs = document.getElementById('game');
 ctx = cvs.getContext('2d');
 resize();
 
-// 初期カメラ（中央へ）
+// ===== 初期カメラ（中央へ） =====
 (() => {
   const v = viewSizeWorld();
   cam.x = (CONFIG.world.w - v.w) / 2;
@@ -13,37 +14,59 @@ resize();
   sanitizeCam();
 })();
 
+// ===== HUD用 =====
 const __V = new URLSearchParams(location.search).get('v') || 'dev';
 function setHUDDrawMs(ms){ if (window.__diag){ __diag.drawMs = ms; } }
 
-// ====== メインループ ======
+// ===== ループ制御 =====
 let last = performance.now();
 let acc = 0;
 let interval = PERF.low ? 1000/30 : 1000/60;
 
+// ====== メインループ ======
 function loop(){
   const now = performance.now();
-  const dt = Math.min(0.033, (now - last)/1000); last = now; acc += dt*1000;
+  const dt = Math.min(0.033, (now - last) / 1000);
+  last = now;
+  acc += dt * 1000;
 
+  // 物理・AI
   sanitizeCam();
   if (typeof updateEntities === 'function') updateEntities(dt);
 
   if (acc >= interval){
     acc = 0;
 
-    // 背景
+    // 1) 画面座標にしてクリア
+    setScreen();
+    ctx.clearRect(0, 0, cvs.width / DPR, cvs.height / DPR);
+
+    // 2) 世界座標（カメラ適用）に切り替え
+    setWorld();
+
+    // 3) 背景（世界座標で丸ごと貼る）
     let t0 = performance.now();
     try{
-      if (typeof drawCityFast === 'function') drawCityFast();
-      else if (typeof drawCity === 'function') drawCity();
-      else { setScreen(); ctx.clearRect(0,0,cvs.width/DPR,cvs.height/DPR); setWorld(); }
+      if (typeof drawCityFast === 'function'){
+        drawCityFast();                    // ← city_pop/safe のどちらでもOK
+      } else if (typeof drawCity === 'function'){
+        drawCity();
+      }
     }catch(e){
-      setScreen(); ctx.fillStyle='#f66'; ctx.font='bold 14px system-ui';
-      ctx.fillText('DRAW ERROR: ' + e.message, 12, 18); setWorld();
+      // 背景描画で例外が出ても画面は維持
+      setScreen();
+      ctx.fillStyle = '#f66';
+      ctx.font = 'bold 14px system-ui';
+      ctx.fillText('DRAW ERROR: ' + e.message, 12, 18);
+      setWorld();
     }
     setHUDDrawMs(performance.now() - t0);
 
+    // 4) エンティティ描画（世界座標のまま）
     if (typeof drawEntities === 'function') drawEntities();
+
+    // 5) 必要ならこの後 setScreen() に戻してUIオーバーレイなど
+    // setScreen();
   }
 
   requestAnimationFrame(loop);
@@ -53,6 +76,8 @@ if (typeof initEntities === 'function') initEntities();
 loop();
 
 /* ====== 入力 ====== */
+
+// ズーム（任意点を基準）
 function zoomAt(px, py, factor){
   const before = screenToWorld(px, py);
   cam.z = clamp(cam.z * factor, zMin, zMax);
@@ -62,7 +87,7 @@ function zoomAt(px, py, factor){
   sanitizeCam();
 }
 
-// タッチ
+// タッチ操作
 let fingers = new Map(); let startDist=0,startZ=cam.z,startMid=null;
 function distance(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
 function midpoint(a,b){ return {x:(a.x+b.x)/2, y:(a.y+b.y)/2}; }
@@ -100,7 +125,7 @@ function endTouches(e){ for(const t of e.changedTouches) fingers.delete(t.identi
 cvs.addEventListener('touchend',endTouches,{passive:true});
 cvs.addEventListener('touchcancel',endTouches,{passive:true});
 
-// マウス
+// マウスパン
 let dragging=false, lastMouse={x:0,y:0};
 cvs.addEventListener('mousedown', e=>{ dragging=true; lastMouse={x:e.clientX,y:e.clientY}; });
 addEventListener('mousemove', e=>{
@@ -113,13 +138,14 @@ addEventListener('mousemove', e=>{
 });
 addEventListener('mouseup', ()=> dragging=false);
 
+// ホイールズーム
 cvs.addEventListener('wheel', e=>{
   e.preventDefault();
   const r=cvs.getBoundingClientRect();
   zoomAt(e.clientX-r.left, e.clientY-r.top, e.deltaY>0?0.9:1.1);
 },{passive:false});
 
-// ＋/−
+// ＋/− ボタン
 (() => {
   const zin=document.getElementById('zin'), zout=document.getElementById('zout');
   if(!zin||!zout) return;
@@ -128,7 +154,7 @@ cvs.addEventListener('wheel', e=>{
   zout.addEventListener('click', ()=>zoomAt(cx(),cy(),0.87));
 })();
 
-/* ==== ヘルプ開閉（ボタン式・確実に動く） ==== */
+/* ==== ヘルプ開閉（ボタン式） ==== */
 (() => {
   const lg  = document.getElementById('legendWrap');
   const btn = document.getElementById('helpBtn');
