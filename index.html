@@ -13,27 +13,19 @@
   .hud{position:absolute;left:12px;top:12px;font-size:14px;line-height:1.4;pointer-events:none;text-shadow:0 1px 0 rgba(0,0,0,.35); z-index:4;}
   .hud h1{margin:0 0 8px;font-size:20px}
   .pill{display:inline-block;background:var(--pane);border:1px solid var(--pane2);padding:6px 10px;border-radius:999px;margin-right:8px;color:#fff;}
-  /* hud 全体は pointer-events:none なので、ボタンだけ許可 */
   .hud #helpBtn{ pointer-events:auto; cursor:pointer; }
 
   canvas{border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.4), inset 0 0 0 1px rgba(255,255,255,.08);touch-action:none; z-index:1;}
 
-  /* ヘルプ：小画面で被らないように固定＋スクロール */
   details.legend{
-    position:fixed; right:12px; top:12px;
-    background:var(--pane); border:1px solid var(--pane2); border-radius:12px;
-    padding:6px 10px; font-size:12px; max-width: min(360px, 86vw);
-    z-index:5; pointer-events:auto;
-    backdrop-filter: blur(8px);
+    position:fixed; right:12px; top:12px; background:var(--pane); border:1px solid var(--pane2); border-radius:12px;
+    padding:6px 10px; font-size:12px; max-width:min(360px,86vw); z-index:5; pointer-events:auto; backdrop-filter:blur(8px);
   }
   details.legend[open]{background:rgba(255,255,255,.10)}
-  /* summary は使わず、専用ボタンで開閉する */
-  details.legend summary{ display:none; } 
-  details.legend summary::-webkit-details-marker{ display:none; }
-  .legend-body{ max-height: 60vh; overflow:auto; }
+  details.legend summary{ display:none; } details.legend summary::-webkit-details-marker{ display:none; }
+  .legend-body{ max-height:60vh; overflow:auto; }
   .legend-body h3{ margin:6px 0 4px; font-size:12px; opacity:.9 }
-  .legend-body ul{ margin:4px 0 8px 16px; padding:0 }
-  .legend-body li{ margin:2px 0 2px 0; }
+  .legend-body ul{ margin:4px 0 8px 16px; padding:0 } .legend-body li{ margin:2px 0 }
 
   .panel{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);display:grid;gap:10px;justify-items:center}
   .held{display:grid;grid-auto-flow:column;gap:10px;align-items:center;background:var(--pane);border:1px solid var(--pane2);backdrop-filter:blur(8px);padding:8px 12px;border-radius:14px}
@@ -41,25 +33,21 @@
     background:linear-gradient(180deg,rgba(255,255,255,.12),rgba(255,255,255,.06));padding:6px 10px;border-radius:12px;color:#fff;text-decoration:none;font-weight:700;font-size:12px}
   .zoomBtns{position:absolute;right:12px;bottom:12px;display:grid;gap:8px}
 
-  /* スマホ最適化 */
   @media (max-width: 480px){
     .hud{ font-size:12px; }
-    details.legend{ right:8px; top:8px; font-size:11px; max-width: 80vw; }
-    .legend-body{ max-height: 56vh; }
-    .panel{ gap:8px }
-    .btn{ padding:6px 10px; font-size:11px }
+    details.legend{ right:8px; top:8px; font-size:11px; max-width:80vw; }
+    .legend-body{ max-height:56vh; }
+    .panel{ gap:8px } .btn{ padding:6px 10px; font-size:11px }
   }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <!-- main.js は #game を参照します -->
   <canvas id="game" width="960" height="600" aria-label="game"></canvas>
 
   <div class="hud">
     <h1>
       ヒントの町 v0.6.3
-      <!-- 専用ヘルプボタン（必ず開閉） -->
       <button class="pill" id="helpBtn">ℹ️ ヘルプ</button>
     </h1>
     <div id="status" style="font-family: ui-monospace, Menlo, Consolas, monospace;"></div>
@@ -76,11 +64,8 @@
         <li><b>＋／−ボタン</b>：ズーム</li>
         <li><b>キャンバスを触る</b>：このヘルプを自動クローズ</li>
       </ul>
-      <h3>コツ</h3>
-      <ul>
-        <li>ズームしてからパンすると目的地に合わせやすい。</li>
-        <li>重いと感じたら少しズームアウトすると軽くなる。</li>
-      </ul>
+      <h3>ヒント</h3>
+      <ul><li>ズームしてからパンすると狙いやすい／重い時は少し引くと軽くなります。</li></ul>
     </div>
   </details>
 
@@ -97,68 +82,78 @@
   </div>
 </div>
 
-<!-- SWキルスイッチ（?killsw=1でSW解除→自動再読込） -->
+<!-- SW キルスイッチ -->
 <script>
 (() => {
   const qs = new URLSearchParams(location.search);
   if (qs.get('killsw') === '1' && 'serviceWorker' in navigator) {
     navigator.serviceWorker.getRegistrations().then(rs => {
       rs.forEach(r => r.unregister());
-      location.replace(location.origin + location.pathname + '?nocache=' + Date.now() + '&v=' + (qs.get('v')||''));
+      location.replace(location.origin + location.pathname + '?nocache=' + Date.now() + '&v=' + (qs.get('v')||'') + '&renderer=' + (qs.get('renderer')||''));
     });
   }
 })();
 </script>
 
-<!-- 自動バージョン読み込み + 診断ローダー -->
+<!-- 診断ローダ：pop→失敗でsafeへ自動フォールバック -->
 <script>
 (function(){
-  const v = new URLSearchParams(location.search).get('v') || ('dev-' + Date.now());
-  window.__diag = { v, scripts: [], errors: [], sw: 'checking...' };
+  const qs = new URLSearchParams(location.search);
+  const v = qs.get('v') || ('dev-' + Date.now());
+  const wantRenderer = qs.get('renderer') || 'pop';
+  window.__diag = { v, scripts: [], errors: [], sw: 'checking...', renderer:'init', fallback:false, drawMs:0, counts:null };
 
   const st = document.getElementById('status');
-  function sizeOf(c){ try{ return (c && c.width) ? (c.width+'x'+c.height) : 'null'; }catch(_){ return 'null'; } }
-  function ok(x){ return (typeof x !== 'undefined') ? (typeof x==='function'?'ƒ':'●') : '×'; }
-  function render(){
+  const ok = (x)=> typeof x!=='undefined' ? (typeof x==='function'?'ƒ':'●') : '×';
+  const size = (c)=> (c && c.width) ? `${c.width}x${c.height}` : 'null';
+  function renderHUD(){
     const sNames = __diag.scripts.map(s=>s.name).join(',');
     const err    = __diag.errors.length ? __diag.errors[__diag.errors.length-1] : 'none';
-    const citySz = sizeOf(window.CITY_LAYER);
     st.innerHTML =
-      `build: <b>${__diag.v}</b> / loaded:[${sNames}] / err:${err}` +
-      ` / SW:${__diag.sw}` +
-      ` / drawCityFast:${ok(window.drawCityFast)} / CITY_LAYER:${citySz}` +
-      (typeof window.CITY_NEEDS_REBUILD!=='undefined' ? ` / NEEDS_REBUILD:${window.CITY_NEEDS_REBUILD}` : '') +
-      (window.cam ? ` / cam:x=${cam.x.toFixed(1)} y=${cam.y.toFixed(1)} z=${cam.z.toFixed(2)}` : '');
+      `build:<b>${__diag.v}</b> / loaded:[${sNames}] / err:${err} / SW:${__diag.sw}`+
+      ` / renderer:${__diag.renderer}${__diag.fallback?'(fallback)':''}`+
+      ` / draw:${__diag.drawMs.toFixed(1)}ms`+
+      (window.CITY_LAYER?` / CITY_LAYER:${size(window.CITY_LAYER)}`:` / CITY_LAYER:null`) +
+      (window.cam?` / cam:x=${cam.x.toFixed(1)} y=${cam.y.toFixed(1)} z=${cam.z.toFixed(2)}`:'') +
+      (__diag.counts?` / counts:${JSON.stringify(__diag.counts)}`:'');
   }
-  window.addEventListener('error', e=>{ __diag.errors.push(e.message || e.type); render(); });
-  window.addEventListener('unhandledrejection', e=>{ __diag.errors.push('promise:'+(e.reason&&e.reason.message||e.reason)); render(); });
+  addEventListener('error', e=>{ __diag.errors.push(e.message||e.type); renderHUD(); });
+  addEventListener('unhandledrejection', e=>{ __diag.errors.push('promise:'+(e.reason&&e.reason.message||e.reason)); renderHUD(); });
 
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.getRegistrations().then(rs=>{
       const a = rs.find(r=>r.active);
       __diag.sw = a ? (a.active && a.active.scriptURL ? a.active.scriptURL.split('/').pop() : 'active') : 'none';
-      render();
+      renderHUD();
     });
-  } else {
-    __diag.sw = 'unsupported';
-  }
+  } else { __diag.sw = 'unsupported'; }
 
   function add(name, src){
     return new Promise((resolve,reject)=>{
       const s = document.createElement('script');
       s.src = src + '?v=' + encodeURIComponent(v);
-      s.onload = ()=>{ __diag.scripts.push({name, url:s.src}); render(); resolve(); };
-      s.onerror = (e)=>{ __diag.errors.push('load:'+name); render(); reject(e); };
+      s.onload = ()=>{ __diag.scripts.push({name, url:s.src}); renderHUD(); resolve(); };
+      s.onerror = (e)=>{ __diag.errors.push('load:'+name); renderHUD(); reject(e); };
       document.body.appendChild(s);
     });
   }
 
+  // 順序：config → (city_pop or city_safe) → entities → main
   add('config','./config.js')
-    .then(()=>add('city','./city.js'))
+    .then(async ()=>{
+      if (wantRenderer==='safe') {
+        __diag.renderer='safe';
+        await add('city_safe','./city_safe.js');
+      } else {
+        __diag.renderer='pop';
+        try { await add('city_pop','./city_pop.js'); }
+        catch(_){ __diag.fallback=true; __diag.renderer='safe'; await add('city_safe','./city_safe.js'); }
+      }
+    })
     .then(()=>add('entities','./entities.js'))
     .then(()=>add('main','./main.js'))
     .catch(()=>{})
-    .finally(()=>{ render(); setInterval(render, 1000); });
+    .finally(()=>{ renderHUD(); setInterval(renderHUD, 800); });
 })();
 </script>
 </body>
