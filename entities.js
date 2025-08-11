@@ -1,31 +1,55 @@
-// ===== 軽量群衆（ワールド座標で移動） =====
-const POP = PERF.low ? {npcs:14} : {npcs:36};
-let dots=[];
+'use strict';
+
+/* 住人の超ミニマム実装（安全運転）
+   - 外部 util は config.js の rand/pick/clamp のみ使用
+   - デバッグ線は OFF。必要になったら FLAGS や URL でONにできます。
+*/
+const ENT = [];
+const ENT_CFG = {
+  n: 28,
+  colors: ['#6ae','#fa8','#9f8','#f6a','#8cf','#ff9ad6','#7bd389','#ffd166']
+};
+const DEBUG_ENT = { rays: false }; // ← ここを true にすると線が出ます
 
 function initEntities(){
-  dots=[];
-  for(let i=0;i<POP.npcs;i++){
-    dots.push({
-      x:rand(200,CONFIG.world.w-200),
-      y:rand(200,CONFIG.world.h-200),
-      vx:rand(-0.6,0.6),
-      vy:rand(-0.6,0.6),
-      c:pick(['#ff7aa2','#ffd166','#7bb6ff','#7bd389'])
+  ENT.length = 0;
+  for (let i=0;i<ENT_CFG.n;i++){
+    ENT.push({
+      x: rand(60, CONFIG.world.w-60),
+      y: rand(60, CONFIG.world.h-60),
+      vx: rand(-22,22),
+      vy: rand(-22,22),
+      r: 3.2,
+      c: pick(ENT_CFG.colors)
     });
   }
 }
 
 function updateEntities(dt){
-  for(const d of dots){
-    d.x+=d.vx; d.y+=d.vy;
-    if(d.x<100||d.x>CONFIG.world.w-100) d.vx*=-1;
-    if(d.y<100||d.y>CONFIG.world.h-100) d.vy*=-1;
+  for (const e of ENT){
+    e.x += e.vx * dt;
+    e.y += e.vy * dt;
+    // 反射
+    if (e.x < 20 || e.x > CONFIG.world.w-20) e.vx *= -1;
+    if (e.y < 20 || e.y > CONFIG.world.h-20) e.vy *= -1;
   }
 }
 
 function drawEntities(){
-  for(const d of dots){
-    ctx.fillStyle=d.c;
-    ctx.beginPath(); ctx.arc(d.x,d.y,6,0,Math.PI*2); ctx.fill();
+  // ここでは World 変換が既に掛かっている前提（main.js → drawCityFast → setWorld()）
+  for (const e of ENT){
+    // 本体
+    ctx.fillStyle = e.c;
+    ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, Math.PI*2); ctx.fill();
+
+    // デバッグ線（無効）
+    if (DEBUG_ENT.rays){
+      ctx.strokeStyle = e.c; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(e.x + 40, e.y - 20); ctx.stroke();
+    }
   }
 }
+
+window.initEntities   = initEntities;
+window.updateEntities = updateEntities;
+window.drawEntities   = drawEntities;
