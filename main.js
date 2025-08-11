@@ -1,21 +1,22 @@
 'use strict';
 
-// ====== 起動 ======
+/* ====== 依存：config.js で以下が定義されている想定 ======
+   - cvs, ctx, DPR, cam{ x,y,z }, zMin,zMax, viewSizeWorld(), screenToWorld(),
+     setScreen(), setWorld(), resize(), sanitizeCam(), clamp(), PERF など
+*/
+
 cvs = document.getElementById('game');
 ctx = cvs.getContext('2d');
 resize();
 
-// 初期カメラ（中心）
-(function initCamCenter() {
+// 初期カメラを中央へ
+(() => {
   const v = viewSizeWorld();
   cam.x = (CONFIG.world.w - v.w) / 2;
   cam.y = (CONFIG.world.h - v.h) / 2;
   cam.z = 0.6;
   sanitizeCam();
 })();
-
-// モバイルはヘルプ閉じ
-try { if (PERF.low) document.getElementById('legendWrap').open = false; } catch(e){}
 
 // ====== HUD 診断 ======
 const __V = new URLSearchParams(location.search).get('v') || 'dev';
@@ -24,12 +25,13 @@ function diag() {
   if (!st) return;
   const ok = (x)=> typeof x!=='undefined' ? (typeof x==='function'?'ƒ':'●') : '×';
   const size = (c)=> (c && c.width) ? `${c.width}x${c.height}` : 'null';
-  st.innerHTML = `build:<b>${__V}</b> / drawCityFast:${ok(drawCityFast)} / CITY_LAYER:${size(window.CITY_LAYER)} / cam:x=${cam.x.toFixed(1)} y=${cam.y.toFixed(1)} z=${cam.z.toFixed(2)}`;
+  st.innerHTML =
+    `build: <b>${__V}</b> / drawCityFast:${ok(window.drawCityFast)} / CITY_LAYER:${size(window.CITY_LAYER)} / cam:x=${cam.x.toFixed(1)} y=${cam.y.toFixed(1)} z=${cam.z.toFixed(2)}`;
 }
 addEventListener('error', e => { const st=document.getElementById('status'); if(st) st.innerHTML = 'SCRIPT ERROR: ' + (e.message||e.type); });
 addEventListener('unhandledrejection', e => { const st=document.getElementById('status'); if(st) st.innerHTML = 'PROMISE ERROR: ' + (e.reason&&e.reason.message||e.reason); });
 
-// ====== ループ ======
+// ====== メインループ ======
 let last = performance.now();
 let acc = 0;
 let interval = PERF.low ? 1000/30 : 1000/60;
@@ -45,14 +47,16 @@ function loop(){
   if (acc >= interval){
     acc = 0;
 
-    // 背景：常に drawCityFast を呼ぶ（内部で必要なら再生成）
+    // 背景（内部で必要ならレイヤ生成）
     try{
       if (typeof drawCityFast === 'function') {
         drawCityFast();
       } else if (typeof drawCity === 'function') {
         drawCity();
       } else {
-        throw new Error('drawCityFast/drawCity not found');
+        setScreen();
+        ctx.clearRect(0,0,cvs.width/DPR,cvs.height/DPR);
+        setWorld();
       }
     }catch(e){
       setScreen(); ctx.fillStyle='#f66'; ctx.font='bold 14px system-ui';
@@ -67,11 +71,11 @@ function loop(){
   requestAnimationFrame(loop);
 }
 
-// 初期生成
+// 初期化
 if (typeof initEntities === 'function') initEntities();
 loop();
 
-// ====== 入力（ピンチ＝ズーム、1本指ドラッグ＝パン、ホイールズーム、＋/−） ======
+/* ====== 入力（ピンチ＝ズーム、1本指ドラッグ＝パン、ホイール・＋/−） ====== */
 function zoomAt(px, py, factor){
   const before = screenToWorld(px, py);
   cam.z = clamp(cam.z * factor, zMin, zMax);
@@ -81,7 +85,7 @@ function zoomAt(px, py, factor){
   sanitizeCam();
 }
 
-// タッチ
+// タッチ操作
 let fingers = new Map(); let startDist=0,startZ=cam.z,startMid=null;
 function distance(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
 function midpoint(a,b){ return {x:(a.x+b.x)/2, y:(a.y+b.y)/2}; }
@@ -147,31 +151,7 @@ cvs.addEventListener('wheel', e=>{
   zout.addEventListener('click', ()=>zoomAt(cx(),cy(),0.87));
 })();
 
-// ==== legend トグル（summary が反応しない環境でも必ず開閉させる）====
-(() => {
-  const lg = document.getElementById('legendWrap');
-  if (!lg) return;
-  const sum = lg.querySelector('summary');
-
-  // クリックで手動トグル（標準挙動を上書き）
-  if (sum) {
-    sum.style.cursor = 'pointer';
-    sum.addEventListener('click', (e) => {
-      e.preventDefault();           // ブラウザの不安定挙動を無効化
-      lg.open = !lg.open;           // 自前で開閉
-    });
-  }
-
-  // Canvasを触ったらヘルプを閉じる（誤タップで邪魔にならないように）
-  cvs.addEventListener('pointerdown', () => { if (lg.open) lg.open = false; });
-
-  // スマホはデフォルトで閉じて開始
-  if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) {
-    lg.open = false;
-  }
-})();
-
-// ==== ヘルプ開閉（確実に動く版）====
+/* ====== ヘルプ開閉（確実に動くボタン式） ====== */
 (() => {
   const lg  = document.getElementById('legendWrap');
   const btn = document.getElementById('helpBtn');
@@ -179,7 +159,7 @@ cvs.addEventListener('wheel', e=>{
 
   const renderLegendState = () => {
     const st = document.getElementById('status');
-    if (st) st.dataset.legend = lg.open ? 'open' : 'closed'; // デバッグフラグ
+    if (st) st.dataset.legend = lg.open ? 'open' : 'closed';
   };
 
   btn.addEventListener('click', (e) => {
@@ -189,13 +169,14 @@ cvs.addEventListener('wheel', e=>{
     renderLegendState();
   });
 
-  // Canvas操作のときは閉じる（被り防止）
-  cvs.addEventListener('pointerdown', () => { if (lg.open) { lg.open = false; renderLegendState(); } });
+  // Canvas操作時は閉じる（被り防止）
+  cvs.addEventListener('pointerdown', () => {
+    if (lg.open) { lg.open = false; renderLegendState(); }
+  });
 
-  // モバイルは開始時に閉じておく
+  // モバイルは初期では閉じる
   if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) {
     lg.open = false;
     renderLegendState();
   }
 })();
-
