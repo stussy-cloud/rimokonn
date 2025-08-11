@@ -12,18 +12,28 @@
 
   .hud{position:absolute;left:12px;top:12px;font-size:14px;line-height:1.4;pointer-events:none;text-shadow:0 1px 0 rgba(0,0,0,.35); z-index:4;}
   .hud h1{margin:0 0 8px;font-size:20px}
-  .pill{display:inline-block;background:var(--pane);border:1px solid var(--pane2);padding:3px 8px;border-radius:999px;margin-right:8px}
-  /* ← hud 全体は pointer-events:none なので、ボタンだけ許可 */
+  .pill{display:inline-block;background:var(--pane);border:1px solid var(--pane2);padding:6px 10px;border-radius:999px;margin-right:8px;color:#fff;}
+  /* hud 全体は pointer-events:none なので、ボタンだけ許可 */
   .hud #helpBtn{ pointer-events:auto; cursor:pointer; }
 
   canvas{border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.4), inset 0 0 0 1px rgba(255,255,255,.08);touch-action:none; z-index:1;}
 
-  details.legend{position:absolute;right:12px;top:12px;background:var(--pane);border:1px solid var(--pane2);border-radius:12px;padding:6px 10px;font-size:12px;max-width:300px; z-index:5; pointer-events:auto;}
-  details.legend[open]{background:rgba(255,255,255,.1)}
+  /* ヘルプ：小画面で被らないように固定＋スクロール */
+  details.legend{
+    position:fixed; right:12px; top:12px;
+    background:var(--pane); border:1px solid var(--pane2); border-radius:12px;
+    padding:6px 10px; font-size:12px; max-width: min(360px, 86vw);
+    z-index:5; pointer-events:auto;
+    backdrop-filter: blur(8px);
+  }
+  details.legend[open]{background:rgba(255,255,255,.10)}
   /* summary は使わず、専用ボタンで開閉する */
-  details.legend summary{ display:none; }
+  details.legend summary{ display:none; } 
   details.legend summary::-webkit-details-marker{ display:none; }
-  .legend-body div{display:flex;gap:8px;align-items:center;margin:4px 0}
+  .legend-body{ max-height: 60vh; overflow:auto; }
+  .legend-body h3{ margin:6px 0 4px; font-size:12px; opacity:.9 }
+  .legend-body ul{ margin:4px 0 8px 16px; padding:0 }
+  .legend-body li{ margin:2px 0 2px 0; }
 
   .panel{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);display:grid;gap:10px;justify-items:center}
   .held{display:grid;grid-auto-flow:column;gap:10px;align-items:center;background:var(--pane);border:1px solid var(--pane2);backdrop-filter:blur(8px);padding:8px 12px;border-radius:14px}
@@ -32,10 +42,10 @@
   .zoomBtns{position:absolute;right:12px;bottom:12px;display:grid;gap:8px}
 
   /* スマホ最適化 */
-  details.legend{ max-width: 80vw; }
   @media (max-width: 480px){
     .hud{ font-size:12px; }
-    details.legend{ right:8px; top:8px; font-size:11px; max-width: 72vw; }
+    details.legend{ right:8px; top:8px; font-size:11px; max-width: 80vw; }
+    .legend-body{ max-height: 56vh; }
     .panel{ gap:8px }
     .btn{ padding:6px 10px; font-size:11px }
   }
@@ -49,9 +59,6 @@
   <div class="hud">
     <h1>
       ヒントの町 v0.6.3
-      <span class="pill">タップ: 拾う/与える</span>
-      <span class="pill">ピンチ: ズーム</span>
-      <span class="pill">2本指ドラッグ: パン</span>
       <!-- 専用ヘルプボタン（必ず開閉） -->
       <button class="pill" id="helpBtn">ℹ️ ヘルプ</button>
     </h1>
@@ -61,8 +68,19 @@
   <details class="legend" id="legendWrap" open>
     <summary>ヘルプ</summary>
     <div id="legend" class="legend-body">
-      <div>このパネルは右上の「ℹ️ ヘルプ」ボタンで開閉します。</div>
-      <div>ピンチでズーム、ドラッグでパン。＋/－ボタンでもズームできます。</div>
+      <h3>操作方法</h3>
+      <ul>
+        <li><b>タップ</b>：拾う／与える</li>
+        <li><b>ピンチ</b>：ズーム</li>
+        <li><b>2本指ドラッグ</b>：パン（移動）</li>
+        <li><b>＋／−ボタン</b>：ズーム</li>
+        <li><b>キャンバスを触る</b>：このヘルプを自動クローズ</li>
+      </ul>
+      <h3>コツ</h3>
+      <ul>
+        <li>ズームしてからパンすると目的地に合わせやすい。</li>
+        <li>重いと感じたら少しズームアウトすると軽くなる。</li>
+      </ul>
     </div>
   </details>
 
@@ -135,7 +153,6 @@
     });
   }
 
-  // 読み込み順を保証
   add('config','./config.js')
     .then(()=>add('city','./city.js'))
     .then(()=>add('entities','./entities.js'))
