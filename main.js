@@ -1,15 +1,10 @@
 'use strict';
 
-/* ====== 依存：config.js で以下が定義されている想定 ======
-   - cvs, ctx, DPR, cam{ x,y,z }, zMin,zMax, viewSizeWorld(), screenToWorld(),
-     setScreen(), setWorld(), resize(), sanitizeCam(), clamp(), PERF など
-*/
-
 cvs = document.getElementById('game');
 ctx = cvs.getContext('2d');
 resize();
 
-// 初期カメラを中央へ
+// 初期カメラ（中央へ）
 (() => {
   const v = viewSizeWorld();
   cam.x = (CONFIG.world.w - v.w) / 2;
@@ -18,18 +13,8 @@ resize();
   sanitizeCam();
 })();
 
-// ====== HUD 診断 ======
 const __V = new URLSearchParams(location.search).get('v') || 'dev';
-function diag() {
-  const st = document.getElementById('status');
-  if (!st) return;
-  const ok = (x)=> typeof x!=='undefined' ? (typeof x==='function'?'ƒ':'●') : '×';
-  const size = (c)=> (c && c.width) ? `${c.width}x${c.height}` : 'null';
-  st.innerHTML =
-    `build: <b>${__V}</b> / drawCityFast:${ok(window.drawCityFast)} / CITY_LAYER:${size(window.CITY_LAYER)} / cam:x=${cam.x.toFixed(1)} y=${cam.y.toFixed(1)} z=${cam.z.toFixed(2)}`;
-}
-addEventListener('error', e => { const st=document.getElementById('status'); if(st) st.innerHTML = 'SCRIPT ERROR: ' + (e.message||e.type); });
-addEventListener('unhandledrejection', e => { const st=document.getElementById('status'); if(st) st.innerHTML = 'PROMISE ERROR: ' + (e.reason&&e.reason.message||e.reason); });
+function setHUDDrawMs(ms){ if (window.__diag){ __diag.drawMs = ms; } }
 
 // ====== メインループ ======
 let last = performance.now();
@@ -38,8 +23,7 @@ let interval = PERF.low ? 1000/30 : 1000/60;
 
 function loop(){
   const now = performance.now();
-  const dt = Math.min(0.033, (now - last)/1000);
-  last = now; acc += dt*1000;
+  const dt = Math.min(0.033, (now - last)/1000); last = now; acc += dt*1000;
 
   sanitizeCam();
   if (typeof updateEntities === 'function') updateEntities(dt);
@@ -47,35 +31,28 @@ function loop(){
   if (acc >= interval){
     acc = 0;
 
-    // 背景（内部で必要ならレイヤ生成）
+    // 背景
+    let t0 = performance.now();
     try{
-      if (typeof drawCityFast === 'function') {
-        drawCityFast();
-      } else if (typeof drawCity === 'function') {
-        drawCity();
-      } else {
-        setScreen();
-        ctx.clearRect(0,0,cvs.width/DPR,cvs.height/DPR);
-        setWorld();
-      }
+      if (typeof drawCityFast === 'function') drawCityFast();
+      else if (typeof drawCity === 'function') drawCity();
+      else { setScreen(); ctx.clearRect(0,0,cvs.width/DPR,cvs.height/DPR); setWorld(); }
     }catch(e){
       setScreen(); ctx.fillStyle='#f66'; ctx.font='bold 14px system-ui';
       ctx.fillText('DRAW ERROR: ' + e.message, 12, 18); setWorld();
     }
+    setHUDDrawMs(performance.now() - t0);
 
     if (typeof drawEntities === 'function') drawEntities();
-
-    diag();
   }
 
   requestAnimationFrame(loop);
 }
 
-// 初期化
 if (typeof initEntities === 'function') initEntities();
 loop();
 
-/* ====== 入力（ピンチ＝ズーム、1本指ドラッグ＝パン、ホイール・＋/−） ====== */
+/* ====== 入力 ====== */
 function zoomAt(px, py, factor){
   const before = screenToWorld(px, py);
   cam.z = clamp(cam.z * factor, zMin, zMax);
@@ -85,7 +62,7 @@ function zoomAt(px, py, factor){
   sanitizeCam();
 }
 
-// タッチ操作
+// タッチ
 let fingers = new Map(); let startDist=0,startZ=cam.z,startMid=null;
 function distance(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
 function midpoint(a,b){ return {x:(a.x+b.x)/2, y:(a.y+b.y)/2}; }
@@ -142,7 +119,7 @@ cvs.addEventListener('wheel', e=>{
   zoomAt(e.clientX-r.left, e.clientY-r.top, e.deltaY>0?0.9:1.1);
 },{passive:false});
 
-// ＋ / －
+// ＋/−
 (() => {
   const zin=document.getElementById('zin'), zout=document.getElementById('zout');
   if(!zin||!zout) return;
@@ -151,32 +128,16 @@ cvs.addEventListener('wheel', e=>{
   zout.addEventListener('click', ()=>zoomAt(cx(),cy(),0.87));
 })();
 
-/* ====== ヘルプ開閉（確実に動くボタン式） ====== */
+/* ==== ヘルプ開閉（ボタン式・確実に動く） ==== */
 (() => {
   const lg  = document.getElementById('legendWrap');
   const btn = document.getElementById('helpBtn');
   if (!lg || !btn) return;
-
   const renderLegendState = () => {
     const st = document.getElementById('status');
     if (st) st.dataset.legend = lg.open ? 'open' : 'closed';
   };
-
-  btn.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    lg.open = !lg.open;
-    renderLegendState();
-  });
-
-  // Canvas操作時は閉じる（被り防止）
-  cvs.addEventListener('pointerdown', () => {
-    if (lg.open) { lg.open = false; renderLegendState(); }
-  });
-
-  // モバイルは初期では閉じる
-  if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) {
-    lg.open = false;
-    renderLegendState();
-  }
+  btn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); lg.open = !lg.open; renderLegendState(); });
+  cvs.addEventListener('pointerdown', () => { if (lg.open) { lg.open = false; renderLegendState(); } });
+  if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) { lg.open = false; renderLegendState(); }
 })();
