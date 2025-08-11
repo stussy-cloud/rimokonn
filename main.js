@@ -146,3 +146,27 @@ cvs.addEventListener('wheel', e=>{
   zin.addEventListener('click', ()=>zoomAt(cx(),cy(),1.15));
   zout.addEventListener('click', ()=>zoomAt(cx(),cy(),0.87));
 })();
+
+// ==== legend トグル（summary が反応しない環境でも必ず開閉させる）====
+(() => {
+  const lg = document.getElementById('legendWrap');
+  if (!lg) return;
+  const sum = lg.querySelector('summary');
+
+  // クリックで手動トグル（標準挙動を上書き）
+  if (sum) {
+    sum.style.cursor = 'pointer';
+    sum.addEventListener('click', (e) => {
+      e.preventDefault();           // ブラウザの不安定挙動を無効化
+      lg.open = !lg.open;           // 自前で開閉
+    });
+  }
+
+  // Canvasを触ったらヘルプを閉じる（誤タップで邪魔にならないように）
+  cvs.addEventListener('pointerdown', () => { if (lg.open) lg.open = false; });
+
+  // スマホはデフォルトで閉じて開始
+  if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) {
+    lg.open = false;
+  }
+})();
