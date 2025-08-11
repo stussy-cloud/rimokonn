@@ -95,7 +95,7 @@
 })();
 </script>
 
-<!-- 診断ローダ：pop→失敗でsafeへ自動フォールバック -->
+<!-- 診断ローダ：各段階 try/catch、失敗しても main まで必ず進む -->
 <script>
 (function(){
   const qs = new URLSearchParams(location.search);
@@ -104,27 +104,25 @@
   window.__diag = { v, scripts: [], errors: [], sw: 'checking...', renderer:'init', fallback:false, drawMs:0, counts:null };
 
   const st = document.getElementById('status');
-  const ok = (x)=> typeof x!=='undefined' ? (typeof x==='function'?'ƒ':'●') : '×';
   const size = (c)=> (c && c.width) ? `${c.width}x${c.height}` : 'null';
-  function renderHUD(){
+  const ok   = (x)=> typeof x!=='undefined' ? (typeof x==='function'?'ƒ':'●') : '×';
+  function hud(){
     const sNames = __diag.scripts.map(s=>s.name).join(',');
     const err    = __diag.errors.length ? __diag.errors[__diag.errors.length-1] : 'none';
     st.innerHTML =
       `build:<b>${__diag.v}</b> / loaded:[${sNames}] / err:${err} / SW:${__diag.sw}`+
       ` / renderer:${__diag.renderer}${__diag.fallback?'(fallback)':''}`+
       ` / draw:${__diag.drawMs.toFixed(1)}ms`+
-      (window.CITY_LAYER?` / CITY_LAYER:${size(window.CITY_LAYER)}`:` / CITY_LAYER:null`) +
-      (window.cam?` / cam:x=${cam.x.toFixed(1)} y=${cam.y.toFixed(1)} z=${cam.z.toFixed(2)}`:'') +
-      (__diag.counts?` / counts:${JSON.stringify(__diag.counts)}`:'');
+      (window.CITY_LAYER?` / CITY_LAYER:${size(window.CITY_LAYER)}`:` / CITY_LAYER:null`);
   }
-  addEventListener('error', e=>{ __diag.errors.push(e.message||e.type); renderHUD(); });
-  addEventListener('unhandledrejection', e=>{ __diag.errors.push('promise:'+(e.reason&&e.reason.message||e.reason)); renderHUD(); });
+  addEventListener('error', e=>{ __diag.errors.push(e.message||e.type); hud(); });
+  addEventListener('unhandledrejection', e=>{ __diag.errors.push('promise:'+(e.reason&&e.reason.message||e.reason)); hud(); });
 
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.getRegistrations().then(rs=>{
       const a = rs.find(r=>r.active);
       __diag.sw = a ? (a.active && a.active.scriptURL ? a.active.scriptURL.split('/').pop() : 'active') : 'none';
-      renderHUD();
+      hud();
     });
   } else { __diag.sw = 'unsupported'; }
 
@@ -132,28 +130,37 @@
     return new Promise((resolve,reject)=>{
       const s = document.createElement('script');
       s.src = src + '?v=' + encodeURIComponent(v);
-      s.onload = ()=>{ __diag.scripts.push({name, url:s.src}); renderHUD(); resolve(); };
-      s.onerror = (e)=>{ __diag.errors.push('load:'+name); renderHUD(); reject(e); };
+      s.onload = ()=>{ __diag.scripts.push({name, url:s.src}); hud(); resolve(); };
+      s.onerror = (e)=>{ __diag.errors.push('load:'+name); hud(); reject(e); };
       document.body.appendChild(s);
     });
   }
 
-  // 順序：config → (city_pop or city_safe) → entities → main
-  add('config','./config.js')
-    .then(async ()=>{
-      if (wantRenderer==='safe') {
-        __diag.renderer='safe';
-        await add('city_safe','./city_safe.js');
-      } else {
-        __diag.renderer='pop';
-        try { await add('city_pop','./city_pop.js'); }
-        catch(_){ __diag.fallback=true; __diag.renderer='safe'; await add('city_safe','./city_safe.js'); }
-      }
-    })
-    .then(()=>add('entities','./entities.js'))
-    .then(()=>add('main','./main.js'))
-    .catch(()=>{})
-    .finally(()=>{ renderHUD(); setInterval(renderHUD, 800); });
+  (async () => {
+    // 1) config（必須）
+    try { await add('config','./config.js'); } catch(e){ __diag.errors.push('config-failed'); }
+
+    // 2) city（pop優先→失敗時 safe）
+    if (wantRenderer==='safe'){
+      __diag.renderer='safe';
+      try { await add('city_safe','./city_safe.js'); }
+      catch(e){ __diag.errors.push('city_safe-failed'); }
+    }else{
+      __diag.renderer='pop';
+      try { await add('city_pop','./city_pop.js'); }
+      catch(e){ __diag.fallback=true; __diag.renderer='safe'; try{ await add('city_safe','./city_safe.js'); }catch(_){ __diag.errors.push('city_both_failed'); } }
+    }
+
+    // 3) entities（失敗しても続行）
+    try { await add('entities','./entities.js'); }
+    catch(e){ __diag.errors.push('entities-failed'); }
+
+    // 4) main（必ず行く）
+    try { await add('main','./main.js'); }
+    catch(e){ __diag.errors.push('main-failed'); }
+
+    hud(); setInterval(hud, 800);
+  })();
 })();
 </script>
 </body>
