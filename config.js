@@ -1,6 +1,18 @@
 'use strict';
 
-// ===== 基本設定 =====
+// ====== グローバル・ユーティリティ（どのモジュールより先に読み込まれる） ======
+(function(){
+  // Math.random をラップ（範囲付き）
+  function rand(min=0, max=1){ return min + Math.random()*(max-min); }
+  function irand(min, max){ return Math.floor(rand(min, max+1)); }
+  function choose(arr){ return arr[(Math.random()*arr.length)|0]; }
+  // 共有
+  window.rand = window.rand || rand;
+  window.irand = window.irand || irand;
+  window.choose = window.choose || choose;
+})();
+
+// ====== 基本設定 ======
 const DPR = Math.min(2, (window.devicePixelRatio||1));
 let cvs, ctx;
 
@@ -12,16 +24,16 @@ const CONFIG = {
 
 // Feature Flags（pop 側のON/OFFに使用）
 const FLAGS = {
-  parks: true,     // 公園
-  lakes: true,     // 湖
-  outlines: true,  // 輪郭線
-  roofHL: true,    // 屋根ハイライト
+  parks: true,
+  lakes: true,
+  outlines: true,
+  roofHL: true,
 };
 
 // パフォーマンス感度（低端末だと 30fps）
 const PERF = { low: false };
 
-// ===== カメラと座標変換 =====
+// ====== カメラと座標変換 ======
 const cam = { x: 0, y: 0, z: 0.6 };
 const zMin = 0.35, zMax = 2.0;
 
@@ -60,7 +72,6 @@ function resize(){
 (function mountCanvas(){
   cvs = document.getElementById('game');
   ctx = cvs.getContext('2d');
-  // 親の中央に広く置く
   const wrap = cvs.parentElement;
   cvs.style.width = 'calc(100vw - 48px)';
   cvs.style.height = 'calc(70vh)';
