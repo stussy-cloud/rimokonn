@@ -2,40 +2,91 @@ name: diag
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   workflow_dispatch:
 
+# diag.json と version.js を main 直下にコミットするので write 権限が必要
 permissions:
   contents: write
 
 jobs:
-  update-version:
+  make-diag:
     runs-on: ubuntu-latest
+    concurrency:
+      group: rimokonn-diag
+      cancel-in-progress: true
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Get short SHA
+      - name: Prepare variables
         id: vars
         run: |
-          SHORT_SHA=$(echo "${GITHUB_SHA}" | cut -c1-7)
-          echo "SHORT_SHA=${SHORT_SHA}" >> $GITHUB_ENV
+          SHORT_SHA="${GITHUB_SHA::7}"
+          WHEN=$(date -u +%FT%TZ)
+          REPO_OWNER="${GITHUB_REPOSITORY_OWNER}"
+          REPO_NAME="${GITHUB_REPOSITORY#*/}"
+          PAGES_BASE="https://${REPO_OWNER}.github.io/${REPO_NAME}"
 
-      - name: Update version.js
+          echo "SHORT_SHA=$SHORT_SHA" >> $GITHUB_ENV
+          echo "WHEN=$WHEN"           >> $GITHUB_ENV
+          echo "REPO_OWNER=$REPO_OWNER" >> $GITHUB_ENV
+          echo "REPO_NAME=$REPO_NAME"   >> $GITHUB_ENV
+          echo "PAGES_BASE=$PAGES_BASE" >> $GITHUB_ENV
+
+      # Service Worker が参照するビルドバージョン（キャッシュ名に使う）
+      - name: Write version.js
         run: |
           echo "self.__BUILD='${SHORT_SHA}';" > version.js
-          cat version.js
+          echo "version.js =>"; cat version.js
 
-      - name: Commit and push version.js
+      # 診断ファイルを JSON で生成（main 直下に配置）
+      - name: Build diag.json
         run: |
-          git config --global user.name "github-actions[bot]"
+          FILES="index.html config.js city_safe.js city_pop.js entities.js main.js service-worker.js polyfills.js manifest.webmanifest"
+          echo "{" > diag.json
+          echo "  \"sha\": \"${GITHUB_SHA}\"," >> diag.json
+          echo "  \"short\": \"${SHORT_SHA}\"," >> diag.json
+          echo "  \"when\": \"${WHEN}\"," >> diag.json
+          echo "  \"branch\": \"main\"," >> diag.json
+          echo "  \"pagesBase\": \"${PAGES_BASE}\"," >> diag.json
+          echo "  \"links\": {" >> diag.json
+          echo "    \"safe\": \"${PAGES_BASE}/?killsw=1&v=${SHORT_SHA}&renderer=safe\"," >> diag.json
+          echo "    \"pop\":  \"${PAGES_BASE}/?killsw=1&v=${SHORT_SHA}&renderer=pop\"" >> diag.json
+          echo "  }," >> diag.json
+          echo "  \"files\": {" >> diag.json
+
+          first=true
+          for f in $FILES; do
+            if [ -f "$f" ]; then
+              SIZE=$(wc -c < "$f" | tr -d ' ')
+              HASH=$(sha256sum "$f" | cut -d' ' -f1)
+              if [ "$first" = true ]; then
+                first=false
+              else
+                echo "    ," >> diag.json
+              fi
+              printf '    "%s": { "size": %s, "sha256": "%s" }' "$f" "$SIZE" "$HASH" >> diag.json
+            fi
+          done
+          echo >> diag.json
+          echo "  }" >> diag.json
+          echo "}" >> diag.json
+
+          echo "diag.json =>"; cat diag.json
+
+      - name: Commit & push diag.json and version.js
+        run: |
+          git config --global user.name  "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add version.js
-          git commit -m "chore: bump build version to ${SHORT_SHA}" || echo "No changes to commit"
+          git add version.js diag.json
+          git commit -m "chore(diag): ${SHORT_SHA} update version & diag.json" || echo "No changes"
           git push
 
-      - name: Show diagnostics
+      - name: Summary
         run: |
-          echo "Build version: ${SHORT_SHA}"
-          echo "Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          echo "BUILD  : ${SHORT_SHA}"
+          echo "DIAG   : ${PAGES_BASE}/diag.json"
+          echo "SAFE   : ${PAGES_BASE}/?killsw=1&v=${SHORT_SHA}&renderer=safe"
+          echo "POP    : ${PAGES_BASE}/?killsw=1&v=${SHORT_SHA}&renderer=pop"
